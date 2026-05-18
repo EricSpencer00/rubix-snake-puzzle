@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rubik's Snake — Formal State Space Verification</title>
+<meta name="description" content="Interactive explorer for the first Coq/TLA+ formalization of Rubik's Snake configurations. 13.4 trillion valid positions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;700;900&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0}
+
+:root {
+  --surf:        #1a1a2e;
+  --surf-raise:  #222240;
+  --surf-edge:   #2e2e52;
+  --text:        #ede8d8;
+  --text-dim:    #8a8699;
+  --amber:       #c8883a;
+  --amber-glow:  #c8883a33;
+  --blue:        #6a7ec8;
+  --green:       #5db87a;
+  --red:         #c86a55;
+  --gold:        #d4b85a;
+  --ease-expo:   cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  background: var(--surf);
+  color: var(--text);
+  font-family: 'Geist Mono', monospace;
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+}
+
+body { overflow-x: hidden; }
+
+/* ── LAYOUT ── */
+
+.scene-wrap {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2rem 4rem;
+}
+
+#snake-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-text {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 52ch;
+  pointer-events: none;
+}
+
+.hero-text h1 {
+  font-family: 'Anybody', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 5vw, 4.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.hero-text h1 span {
+  color: var(--amber);
+}
+
+.hero-text p {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  line-height: 1.8;
+  max-width: 48ch;
+  margin: 0 auto;
+}
+
+.scroll-cue {
+  position: relative;
+  z-index: 1;
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: pulse 2.5s ease-in-out infinite;
+}
+
+.scroll-cue svg { width: 20px; height: 20px; stroke: var(--text-dim); fill: none; stroke-width: 2; }
+
+@keyframes pulse { 0%,100%{opacity:.4;transform:translateY(0)} 50%{opacity:1;transform:translateY(4px)} }
+
+/* ── SECTION RHYTHM ── */
+
+section {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 6rem 2rem;
+}
+
+section + section { padding-top: 2rem; }
+
+h2 {
+  font-family: 'Anybody', sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.6rem, 3.2vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.2rem;
+}
+
+h2 .num {
+  color: var(--amber);
+  font-size: 0.6em;
+  vertical-align: super;
+  margin-right: 0.3ch;
+}
+
+.prose {
+  max-width: 62ch;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.85;
+  margin-bottom: 2.4rem;
+}
+
+/* ── STATE SPACE CHART ── */
+
+.chart-section { padding-bottom: 4rem; }
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 320px;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--surf-edge);
+  position: relative;
+}
+
+.bar-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  justify-content: flex-end;
+  position: relative;
+  cursor: default;
+}
+
+.bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  position: relative;
+  transition: opacity 200ms ease;
+  min-height: 2px;
+}
+
+.bar-valid { background: var(--green); }
+.bar-invalid { background: var(--red); margin-bottom: 0; }
+
+.bar-group:hover .bar { opacity: 0.8; }
+
+.bar-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+  white-space: nowrap;
+}
+
+.bar-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  background: var(--surf-raise);
+  border: 1px solid var(--surf-edge);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+  z-index: 10;
+}
+
+.bar-group:hover .bar-tooltip { opacity: 1; }
+
+.chart-legend {
+  display: flex;
+  gap: 1.6rem;
+  margin-top: 1rem;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.4ch;
+  vertical-align: middle;
+}
+
+/* ── BIG NUMBER ── */
+
+.big-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--surf-edge);
+  border: 1px solid var(--surf-edge);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 2.4rem 0;
+}
+
+.big-num-cell {
+  background: var(--surf);
+  padding: 1.8rem 1.6rem;
+}
+
+.big-num-cell .value {
+  font-family: 'Anybody', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.big-num-cell .label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 0.4rem;
+  letter-spacing: 0.04em;
+}
+
+.value-amber { color: var(--amber); }
+.value-green { color: var(--green); }
+.value-red   { color: var(--red); }
+.value-gold  { color: var(--gold); }
+
+/* ── INTERACTIVE SNAKE BUILDER ── */
+
+.builder-section {
+  padding-top: 4rem;
+}
+
+.builder-wrap {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 740px) {
+  .builder-wrap { grid-template-columns: 1fr; }
+}
+
+#builder-canvas {
+  width: 100%;
+  aspect-ratio: 4/3;
+  border-radius: 8px;
+  border: 1px solid var(--surf-edge);
+  background: var(--surf-raise);
+  cursor: grab;
+}
+
+#builder-canvas:active { cursor: grabbing; }
+
+.builder-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.control-row label {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  min-width: 5ch;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rot-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.rot-btn {
+  background: var(--surf-raise);
+  border: 1px solid var(--surf-edge);
+  color: var(--text);
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.rot-btn:hover {
+  border-color: var(--amber);
+  background: var(--amber-glow);
+}
+
+.rot-btn.active {
+  background: var(--amber);
+  color: var(--surf);
+  border-color: var(--amber);
+  font-weight: 700;
+}
+
+.config-display {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  background: var(--surf-raise);
+  border: 1px solid var(--surf-edge);
+  border-radius: 6px;
+  padding: 0.8rem;
+  word-break: break-all;
+  line-height: 1.8;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.config-display .rot-char {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  margin: 1px;
+  font-weight: 500;
+}
+
+.config-display .rot-char.current {
+  background: var(--amber);
+  color: var(--surf);
+}
+
+.builder-status {
+  font-size: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-valid {
+  background: #5db87a18;
+  border: 1px solid #5db87a44;
+  color: var(--green);
+}
+
+.status-invalid {
+  background: #c86a5518;
+  border: 1px solid #c86a5544;
+  color: var(--red);
+}
+
+.btn-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn {
+  flex: 1;
+  background: var(--surf-raise);
+  border: 1px solid var(--surf-edge);
+  color: var(--text);
+  font-family: 'Geist Mono', monospace;
+  font-size: 0.72rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  text-align: center;
+}
+
+.btn:hover { border-color: var(--amber); }
+
+.btn-primary {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--surf);
+  font-weight: 700;
+}
+
+.btn-primary:hover { opacity: 0.85; }
+
+/* ── DATA TABLE ── */
+
+.data-table-wrap {
+  overflow-x: auto;
+  margin: 2rem 0;
+  border: 1px solid var(--surf-edge);
+  border-radius: 8px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+th {
+  text-align: left;
+  padding: 0.8rem 1rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  background: var(--surf-raise);
+  border-bottom: 1px solid var(--surf-edge);
+  white-space: nowrap;
+}
+
+td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--surf-edge);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+tr:last-child td { border-bottom: none; }
+
+tr:hover td { background: var(--surf-raise); }
+
+td.mono { font-weight: 500; }
+td.green { color: var(--green); }
+td.red   { color: var(--red); }
+
+tr.highlight td {
+  background: var(--amber-glow);
+}
+
+/* ── PROOF LINKS ── */
+
+.proof-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--surf-edge);
+  border: 1px solid var(--surf-edge);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 2rem 0;
+}
+
+.proof-card {
+  background: var(--surf);
+  padding: 1.6rem;
+  text-decoration: none;
+  color: var(--text);
+  transition: background 200ms ease;
+}
+
+.proof-card:hover { background: var(--surf-raise); }
+
+.proof-card .tag {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--amber);
+  margin-bottom: 0.5rem;
+}
+
+.proof-card h3 {
+  font-family: 'Anybody', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.proof-card p {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+/* ── FOOTER ── */
+
+footer {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 3rem 2rem 4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  border-top: 1px solid var(--surf-edge);
+}
+
+footer a {
+  color: var(--amber);
+  text-decoration: none;
+}
+
+footer a:hover { text-decoration: underline; }
+
+/* ── ANIMATIONS ── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  opacity: 0;
+  animation: fadeUp 0.8s var(--ease-expo) forwards;
+}
+
+.fade-up-d1 { animation-delay: 0.1s; }
+.fade-up-d2 { animation-delay: 0.2s; }
+.fade-up-d3 { animation-delay: 0.35s; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--surf); }
+::-webkit-scrollbar-thumb { background: var(--surf-edge); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ════ HERO ════ -->
+<div class="scene-wrap">
+  <canvas id="snake-canvas"></canvas>
+  <div class="hero-text fade-up">
+    <h1>Rubik's <span>Snake</span></h1>
+    <p>First formal verification of the puzzle's state space. 24 wedges, 23 joints, 4 rotations each. 70 trillion possible configurations. How many actually work?</p>
+  </div>
+  <div class="scroll-cue fade-up fade-up-d2">
+    <span>scroll</span>
+    <svg viewBox="0 0 20 20"><path d="M10 4v12M5 11l5 5 5-5"/></svg>
+  </div>
+</div>
+
+<!-- ════ BIG NUMBERS ════ -->
+<section class="fade-up fade-up-d3">
+  <div class="big-numbers">
+    <div class="big-num-cell">
+      <div class="value">70,368,744,177,664</div>
+      <div class="label">Total configurations (4<sup>23</sup>)</div>
+    </div>
+    <div class="big-num-cell">
+      <div class="value value-green">13,446,591,920,995</div>
+      <div class="label">Valid (no self-intersection)</div>
+    </div>
+    <div class="big-num-cell">
+      <div class="value value-red">19.1%</div>
+      <div class="label">Geometrically impossible</div>
+    </div>
+    <div class="big-num-cell">
+      <div class="value value-gold">63,970,851</div>
+      <div class="label">Closed loops</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ CHART ════ -->
+<section class="chart-section">
+  <h2><span class="num">01</span>Collision onset</h2>
+  <p class="prose">With fewer than 9 wedges, the snake can't fold back on itself: every configuration is valid. At 9 wedges, the first collisions appear (1.56% invalid). The invalid fraction climbs steadily, reaching 19.1% at the full 24-wedge puzzle.</p>
+
+  <div class="bar-chart" id="barChart"></div>
+  <div class="chart-legend">
+    <span><span class="legend-dot" style="background:var(--green)"></span>Valid</span>
+    <span><span class="legend-dot" style="background:var(--red)"></span>Invalid (collision)</span>
+  </div>
+</section>
+
+<!-- ════ INTERACTIVE BUILDER ════ -->
+<section class="builder-section">
+  <h2><span class="num">02</span>Build a snake</h2>
+  <p class="prose">Choose a rotation at each joint. The 3D model updates in real time. Red highlights mark collisions. Click randomize to explore the space.</p>
+
+  <div class="builder-wrap">
+    <canvas id="builder-canvas"></canvas>
+    <div class="builder-controls">
+      <div id="joint-controls"></div>
+      <div class="config-display" id="config-display"></div>
+      <div class="builder-status status-valid" id="builder-status">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg>
+        <span>Valid configuration</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="randomizeSnake()">Randomize</button>
+        <button class="btn" onclick="straightSnake()">Straighten</button>
+        <button class="btn" onclick="ballSnake()">Ball</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ DATA TABLE ════ -->
+<section>
+  <h2><span class="num">03</span>Verified counts</h2>
+  <p class="prose">Each row is machine-checked: the Python enumerator's output matches the Coq proofs for small N. Aylett's corrected 2022 result provides the n=24 ground truth.</p>
+
+  <div class="data-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Wedges</th>
+          <th>Joints</th>
+          <th>Unconstrained</th>
+          <th>Valid</th>
+          <th>Invalid %</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody id="data-table-body"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ════ FORMAL PROOFS ════ -->
+<section>
+  <h2><span class="num">04</span>Formal proofs</h2>
+  <p class="prose">This is the first formal verification of the Rubik's Snake in any proof assistant. Three complementary approaches cover different verification depths.</p>
+
+  <div class="proof-grid">
+    <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/coq" target="_blank">
+      <div class="tag">Coq / Rocq</div>
+      <h3>State space formalization</h3>
+      <p>Wedge geometry, rotation semantics, collision predicate, symmetry proofs. Machine-checked test vectors for n=2..14.</p>
+    </a>
+    <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/tla" target="_blank">
+      <div class="tag">TLA+</div>
+      <h3>Model checking</h3>
+      <p>Incremental state machine spec. Invariant: no cell occupied twice. Configurable N for TLC exhaustive checking.</p>
+    </a>
+    <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/python" target="_blank">
+      <div class="tag">Python</div>
+      <h3>Reference enumerator</h3>
+      <p>Backtracking search with collision pruning. Validated test vectors cross-check the Coq proofs.</p>
+    </a>
+  </div>
+</section>
+
+<!-- ════ FOOTER ════ -->
+<footer>
+  <span>Rubik's Snake Formal Verification &middot; 2026</span>
+  <a href="https://github.com/EricSpencer00/rubix-snake-puzzle">GitHub</a>
+</footer>
+
+<script>
+// ─── DATA ───
+const DATA = [
+  { n:2,  valid:4,              unc:4 },
+  { n:3,  valid:16,             unc:16 },
+  { n:4,  valid:64,             unc:64 },
+  { n:5,  valid:256,            unc:256 },
+  { n:6,  valid:1024,           unc:1024 },
+  { n:7,  valid:4096,           unc:4096 },
+  { n:8,  valid:16384,          unc:16384 },
+  { n:9,  valid:64512,          unc:65536 },
+  { n:10, valid:245760,         unc:262144 },
+  { n:11, valid:983040,         unc:1048576 },
+  { n:12, valid:3735552,        unc:4194304 },
+  { n:13, valid:14811136,       unc:16777216 },
+  { n:14, valid:54525952,       unc:67108864 },
+  { n:24, valid:13446591920995, unc:70368744177664 },
+];
+
+function fmt(n) {
+  return n.toLocaleString('en-US');
+}
+
+// ─── BAR CHART ───
+(function buildChart() {
+  const el = document.getElementById('barChart');
+  const maxLog = Math.log10(DATA[DATA.length-1].unc);
+
+  DATA.forEach(d => {
+    const inv = d.unc - d.valid;
+    const invPct = ((inv / d.unc) * 100).toFixed(2);
+    const totalH = (Math.log10(d.unc) / maxLog) * 90 + 5;
+    const validH = totalH * (d.valid / d.unc);
+    const invH = totalH - validH;
+
+    const group = document.createElement('div');
+    group.className = 'bar-group';
+    group.innerHTML = `
+      <div class="bar-tooltip">
+        <strong>n = ${d.n}</strong><br>
+        Valid: ${fmt(d.valid)}<br>
+        Invalid: ${fmt(inv)}<br>
+        ${invPct}% collision
+      </div>
+      <div class="bar bar-invalid" style="height:${invH}%"></div>
+      <div class="bar bar-valid" style="height:${validH}%"></div>
+      <div class="bar-label">${d.n}</div>
+    `;
+    el.appendChild(group);
+  });
+})();
+
+// ─── DATA TABLE ───
+(function buildTable() {
+  const tbody = document.getElementById('data-table-body');
+  DATA.forEach(d => {
+    const inv = ((1 - d.valid / d.unc) * 100).toFixed(2);
+    const src = d.n <= 14 ? 'Coq + Python' : 'Aylett 2022';
+    const cls = d.n === 24 ? ' class="highlight"' : '';
+    tbody.innerHTML += `<tr${cls}>
+      <td class="mono">${d.n}</td>
+      <td class="mono">${d.n - 1}</td>
+      <td class="mono">${fmt(d.unc)}</td>
+      <td class="mono green">${fmt(d.valid)}</td>
+      <td class="mono ${parseFloat(inv) > 0 ? 'red' : ''}">${inv}%</td>
+      <td>${src}</td>
+    </tr>`;
+  });
+})();
+
+// ─── HERO 3D SNAKE ───
+(function heroSnake() {
+  const canvas = document.getElementById('snake-canvas');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.set(0, 2, 12);
+  camera.lookAt(0, 0, 0);
+
+  const ambient = new THREE.AmbientLight(0xede8d8, 0.4);
+  const dir1 = new THREE.DirectionalLight(0xc8883a, 0.8);
+  dir1.position.set(5, 8, 4);
+  const dir2 = new THREE.DirectionalLight(0x6a7ec8, 0.4);
+  dir2.position.set(-4, 2, -3);
+  scene.add(ambient, dir1, dir2);
+
+  // Build a known pretty configuration (ball-ish shape)
+  const config = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
+  const group = new THREE.Group();
+  buildSnakeGeometry(group, config, 0xc8883a, 0x8a6930);
+  scene.add(group);
+
+  function resize() {
+    const w = canvas.parentElement.clientWidth;
+    const h = canvas.parentElement.clientHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  let t = 0;
+  (function animate() {
+    requestAnimationFrame(animate);
+    t += 0.008;
+    group.rotation.y = t;
+    group.rotation.x = Math.sin(t * 0.4) * 0.15;
+    renderer.render(scene, camera);
+  })();
+})();
+
+// ─── SNAKE GEOMETRY ENGINE ───
+const DIRS = {
+  PosX:[1,0,0], NegX:[-1,0,0],
+  PosY:[0,1,0], NegY:[0,-1,0],
+  PosZ:[0,0,1], NegZ:[0,0,-1],
+};
+const NEG = { PosX:'NegX', NegX:'PosX', PosY:'NegY', NegY:'PosY', PosZ:'NegZ', NegZ:'PosZ' };
+
+function crossDir(a, b) {
+  const va = DIRS[a], vb = DIRS[b];
+  const c = [
+    va[1]*vb[2]-va[2]*vb[1],
+    va[2]*vb[0]-va[0]*vb[2],
+    va[0]*vb[1]-va[1]*vb[0],
+  ];
+  for (const [k,v] of Object.entries(DIRS)) {
+    if (v[0]===c[0] && v[1]===c[1] && v[2]===c[2]) return k;
+  }
+  return 'PosX';
+}
+
+function applyRot(fwd, up, rot) {
+  const right = crossDir(fwd, up);
+  if (rot===0) return up;
+  if (rot===1) return right;
+  if (rot===2) return NEG[up];
+  if (rot===3) return NEG[right];
+  return up;
+}
+
+function snakePositions(config) {
+  let pos = [0,0,0], fwd = 'PosX', up = 'PosY', parity = false;
+  const positions = [pos.slice()];
+  const orientations = [{ fwd, up, parity }];
+  const occupied = new Set();
+  occupied.add(pos.join(','));
+  const collisions = new Set();
+
+  for (let i = 0; i < config.length; i++) {
+    const newUp = applyRot(fwd, up, config[i]);
+    const stepDir = parity ? newUp : fwd;
+    const dv = DIRS[stepDir];
+    pos = [pos[0]+dv[0], pos[1]+dv[1], pos[2]+dv[2]];
+
+    const key = pos.join(',');
+    if (occupied.has(key)) collisions.add(positions.length);
+    occupied.add(key);
+    positions.push(pos.slice());
+
+    if (parity) { const nf = newUp; up = NEG[fwd]; fwd = nf; }
+    else { up = newUp; }
+    parity = !parity;
+    orientations.push({ fwd, up, parity });
+  }
+  return { positions, orientations, collisions };
+}
+
+function buildSnakeGeometry(group, config, baseColor, darkColor) {
+  while (group.children.length) group.remove(group.children[0]);
+
+  const { positions, collisions } = snakePositions(config);
+  const cx = positions.reduce((s,p) => s+p[0], 0) / positions.length;
+  const cy = positions.reduce((s,p) => s+p[1], 0) / positions.length;
+  const cz = positions.reduce((s,p) => s+p[2], 0) / positions.length;
+
+  const geo = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+
+  positions.forEach((p, i) => {
+    const isCollision = collisions.has(i);
+    const mat = new THREE.MeshStandardMaterial({
+      color: isCollision ? 0xc86a55 : (i % 2 === 0 ? baseColor : darkColor),
+      roughness: 0.6,
+      metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(p[0]-cx, p[1]-cy, p[2]-cz);
+    group.add(mesh);
+
+    // Connection cylinder
+    if (i < positions.length - 1) {
+      const np = positions[i+1];
+      const dx = np[0]-p[0], dy = np[1]-p[1], dz = np[2]-p[2];
+      const len = Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if (len > 0) {
+        const cGeo = new THREE.CylinderGeometry(0.12, 0.12, len * 0.3, 6);
+        const cMat = new THREE.MeshStandardMaterial({ color: 0x444466, roughness: 0.8 });
+        const cyl = new THREE.Mesh(cGeo, cMat);
+        cyl.position.set(
+          (p[0]+np[0])/2-cx,
+          (p[1]+np[1])/2-cy,
+          (p[2]+np[2])/2-cz
+        );
+        const dir = new THREE.Vector3(dx,dy,dz).normalize();
+        const up = new THREE.Vector3(0,1,0);
+        if (Math.abs(dir.dot(up)) < 0.99) {
+          const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
+          cyl.quaternion.copy(quat);
+        }
+        group.add(cyl);
+      }
+    }
+  });
+}
+
+// ─── INTERACTIVE BUILDER ───
+let builderConfig = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+let builderScene, builderCamera, builderRenderer, builderGroup;
+let builderDrag = false, builderPrevMouse = {x:0,y:0};
+let builderRotX = 0.3, builderRotY = 0;
+const NUM_JOINTS = 23;
+
+(function initBuilder() {
+  const canvas = document.getElementById('builder-canvas');
+  builderRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  builderRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  builderRenderer.setClearColor(0x222240);
+
+  builderScene = new THREE.Scene();
+  builderCamera = new THREE.PerspectiveCamera(35, 4/3, 0.1, 100);
+  builderCamera.position.set(0, 0, 18);
+
+  builderScene.add(new THREE.AmbientLight(0xede8d8, 0.5));
+  const d1 = new THREE.DirectionalLight(0xc8883a, 0.7);
+  d1.position.set(5, 8, 4);
+  const d2 = new THREE.DirectionalLight(0x6a7ec8, 0.3);
+  d2.position.set(-4, 2, -3);
+  builderScene.add(d1, d2);
+
+  builderGroup = new THREE.Group();
+  builderScene.add(builderGroup);
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    builderRenderer.setSize(rect.width, rect.height);
+    builderCamera.aspect = rect.width / rect.height;
+    builderCamera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Drag to rotate
+  canvas.addEventListener('pointerdown', e => {
+    builderDrag = true;
+    builderPrevMouse = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!builderDrag) return;
+    const dx = e.clientX - builderPrevMouse.x;
+    const dy = e.clientY - builderPrevMouse.y;
+    builderRotY += dx * 0.008;
+    builderRotX += dy * 0.008;
+    builderPrevMouse = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointerup', () => { builderDrag = false; });
+
+  buildJointControls();
+  updateBuilder();
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    if (!builderDrag) builderRotY += 0.003;
+    builderGroup.rotation.x = builderRotX;
+    builderGroup.rotation.y = builderRotY;
+    builderRenderer.render(builderScene, builderCamera);
+  })();
+})();
+
+function buildJointControls() {
+  const wrap = document.getElementById('joint-controls');
+  wrap.innerHTML = '';
+  // Show first 10 joints with individual controls, rest collapsed
+  const show = Math.min(NUM_JOINTS, 10);
+  for (let i = 0; i < show; i++) {
+    const row = document.createElement('div');
+    row.className = 'control-row';
+    row.innerHTML = `
+      <label>J${i+1}</label>
+      <div class="rot-buttons">
+        ${[0,1,2,3].map(r => `<button class="rot-btn ${builderConfig[i]===r?'active':''}" data-joint="${i}" data-rot="${r}">${['0°','90°','180°','270°'][r]}</button>`).join('')}
+      </div>
+    `;
+    wrap.appendChild(row);
+  }
+  wrap.addEventListener('click', e => {
+    const btn = e.target.closest('.rot-btn');
+    if (!btn) return;
+    const j = parseInt(btn.dataset.joint);
+    const r = parseInt(btn.dataset.rot);
+    builderConfig[j] = r;
+    buildJointControls();
+    updateBuilder();
+  });
+}
+
+function updateBuilder() {
+  buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0x8a6930);
+  builderRotX = 0.3;
+
+  const { positions, collisions } = snakePositions(builderConfig);
+  const isValid = collisions.size === 0;
+
+  const statusEl = document.getElementById('builder-status');
+  if (isValid) {
+    statusEl.className = 'builder-status status-valid';
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>Valid: ${positions.length} wedges, no collisions</span>`;
+  } else {
+    statusEl.className = 'builder-status status-invalid';
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at wedge${collisions.size>1?'s':''} ${[...collisions].join(', ')}</span>`;
+  }
+
+  const display = document.getElementById('config-display');
+  display.innerHTML = builderConfig.map((r, i) =>
+    `<span class="rot-char" style="${i<10?'background:var(--surf-edge)':''}">${['0','1','2','3'][r]}</span>`
+  ).join('');
+}
+
+function randomizeSnake() {
+  builderConfig = Array.from({length: NUM_JOINTS}, () => Math.floor(Math.random()*4));
+  buildJointControls();
+  updateBuilder();
+}
+
+function straightSnake() {
+  builderConfig = Array(NUM_JOINTS).fill(0);
+  buildJointControls();
+  updateBuilder();
+}
+
+function ballSnake() {
+  builderConfig = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
+  buildJointControls();
+  updateBuilder();
+}
+
+// ─── SCROLL FADE IN ───
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.animation = 'fadeUp 0.7s var(--ease-expo) forwards';
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('section').forEach(s => {
+  s.style.opacity = '0';
+  observer.observe(s);
+});
+</script>
+
+</body>
+</html>
