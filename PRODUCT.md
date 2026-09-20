@@ -1,7 +1,7 @@
 # Rubik's Snake Puzzle — Formal Verification Visualizer
 
 ## Product Purpose
-Interactive visualization of Rubik's Snake state space enumeration results. Lets visitors explore the puzzle geometry, see how configurations are counted, and understand why ~19% of states are invalid due to self-intersection.
+Interactive visualization of Rubik's Snake state space enumeration results. Lets visitors explore the puzzle geometry, see how configurations are counted, and understand why ~80.9% of states are invalid due to self-intersection.
 
 ## Users
 - Puzzle enthusiasts and recreational mathematicians

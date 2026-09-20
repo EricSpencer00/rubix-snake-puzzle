@@ -19,7 +19,7 @@ Peter Aylett's exhaustive backtracking search (2011, corrected 2022) established
 | After symmetry deduction (mirror + cyclic) | **6,721,828,475,867** |
 | Closed-loop configurations | 63,970,851 |
 
-~19.1% of the state space is invalid due to collision.
+~80.9% of the state space is invalid due to collision; the remaining 19.1% is valid.
 
 ## This Repository
 

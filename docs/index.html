@@ -577,7 +577,7 @@ footer a:hover { text-decoration: underline; }
       <div class="label">Valid (no self-intersection)</div>
     </div>
     <div class="big-num-cell">
-      <div class="value value-red">19.1%</div>
+      <div class="value value-red">80.9%</div>
       <div class="label">Geometrically impossible</div>
     </div>
     <div class="big-num-cell">
@@ -590,7 +590,7 @@ footer a:hover { text-decoration: underline; }
 <!-- ════ CHART ════ -->
 <section class="chart-section">
   <h2><span class="num">01</span>Collision onset</h2>
-  <p class="prose">With fewer than 9 wedges, the snake can't fold back on itself: every configuration is valid. At 9 wedges, the first collisions appear (1.56% invalid). The invalid fraction climbs steadily, reaching 19.1% at the full 24-wedge puzzle.</p>
+  <p class="prose">With fewer than 9 wedges, the snake can't fold back on itself: every configuration is valid. At 9 wedges, the first collisions appear (1.56% invalid). The invalid fraction climbs steadily, reaching 80.9% at the full 24-wedge puzzle. Only 19.1% of the complete state space remains valid.</p>
 
   <div class="bar-chart" id="barChart"></div>
   <div class="chart-legend">
@@ -615,7 +615,7 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" onclick="randomizeSnake()">Randomize</button>
-        <button class="btn" onclick="straightSnake()">Straighten</button>
+        <button class="btn" onclick="resetSnake()">Reset</button>
         <button class="btn" onclick="ballSnake()">Ball</button>
       </div>
     </div>
@@ -745,7 +745,7 @@ function fmt(n) {
 })();
 
 // ─── HERO 3D SNAKE ───
-(function heroSnake() {
+function heroSnake() {
   const canvas = document.getElementById('snake-canvas');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -768,6 +768,13 @@ function fmt(n) {
   buildSnakeGeometry(group, config, 0xc8883a, 0x8a6930);
   scene.add(group);
 
+  // Frame the complete snake instead of letting the long chain crowd the title.
+  const bounds = new THREE.Box3().setFromObject(group);
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const fitDistance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
+  camera.position.set(0, Math.min(2, sphere.radius * 0.18), fitDistance * 1.12);
+  camera.lookAt(sphere.center);
+
   function resize() {
     const w = canvas.parentElement.clientWidth;
     const h = canvas.parentElement.clientHeight;
@@ -786,7 +793,7 @@ function fmt(n) {
     group.rotation.x = Math.sin(t * 0.4) * 0.15;
     renderer.render(scene, camera);
   })();
-})();
+}
 
 // ─── SNAKE GEOMETRY ENGINE ───
 const DIRS = {
@@ -892,12 +899,14 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
   });
 }
 
+heroSnake();
+
 // ─── INTERACTIVE BUILDER ───
-let builderConfig = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+const NUM_JOINTS = 23;
+let builderConfig = Array(NUM_JOINTS).fill(1);
 let builderScene, builderCamera, builderRenderer, builderGroup;
 let builderDrag = false, builderPrevMouse = {x:0,y:0};
 let builderRotX = 0.3, builderRotY = 0;
-const NUM_JOINTS = 23;
 
 (function initBuilder() {
   const canvas = document.getElementById('builder-canvas');
@@ -1011,8 +1020,8 @@ function randomizeSnake() {
   updateBuilder();
 }
 
-function straightSnake() {
-  builderConfig = Array(NUM_JOINTS).fill(0);
+function resetSnake() {
+  builderConfig = Array(NUM_JOINTS).fill(1);
   buildJointControls();
   updateBuilder();
 }
