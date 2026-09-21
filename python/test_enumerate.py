@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Cross-validation test vectors for the Rubik's Snake enumerator."""
 
+from pathlib import Path
+import subprocess
+import sys
+
 from enumerate import enumerate_snakes
 
 EXPECTED = {
@@ -58,10 +62,24 @@ def test_colliding_prefix_has_no_valid_suffix():
     assert result['closed_loops'] == 0
     assert result['invalid_pct'] == '100.00%'
 
+
+def test_cli_rejects_prefix_longer_than_snake():
+    script = Path(__file__).with_name('enumerate.py')
+    completed = subprocess.run(
+        [sys.executable, str(script), '--wedges', '1', '--prefix', '0'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert 'prefix cannot contain more rotations' in completed.stderr
+
 if __name__ == '__main__':
     print("Running cross-validation tests...")
     test_small_instances()
     test_prefix_partition()
     test_prefix_validation()
     test_colliding_prefix_has_no_valid_suffix()
+    test_cli_rejects_prefix_longer_than_snake()
     print("All tests passed.")

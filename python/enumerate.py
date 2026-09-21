@@ -195,6 +195,10 @@ def main():
         help='Fixed joint rotations for a reproducible search shard (values 0..3)',
     )
     args = parser.parse_args()
+    if args.wedges < 1:
+        parser.error('--wedges must be a positive integer')
+    if len(args.prefix) > args.wedges - 1:
+        parser.error('prefix cannot contain more rotations than the snake has joints')
 
     print(f"Enumerating {args.wedges}-wedge Rubik's Snake...")
     remaining_joints = args.wedges - 1 - len(args.prefix)
