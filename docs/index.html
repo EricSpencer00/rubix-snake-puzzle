@@ -763,17 +763,17 @@ function heroSnake() {
   scene.add(ambient, dir1, dir2);
 
   // Build a known pretty configuration (ball-ish shape)
-  const config = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
+  const config = BALL_CONFIG;
   const group = new THREE.Group();
+  group.scale.setScalar(0.68);
+  group.position.set(2.3, 1.05, 0);
   buildSnakeGeometry(group, config, 0xc8883a, 0x8a6930);
   scene.add(group);
 
-  // Frame the complete snake instead of letting the long chain crowd the title.
-  const bounds = new THREE.Box3().setFromObject(group);
-  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
-  const fitDistance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
-  camera.position.set(0, Math.min(2, sphere.radius * 0.18), fitDistance * 1.12);
-  camera.lookAt(sphere.center);
+  // Keep the folded chain in the upper-left visual field, leaving the title
+  // readable while the individual triangular shells remain recognizable.
+  camera.position.set(0, 1.5, 14);
+  camera.lookAt(0, 0, 0);
 
   function resize() {
     const w = canvas.parentElement.clientWidth;
@@ -795,142 +795,239 @@ function heroSnake() {
   })();
 }
 
-// ─── SNAKE GEOMETRY ENGINE ───
-const DIRS = {
-  PosX:[1,0,0], NegX:[-1,0,0],
-  PosY:[0,1,0], NegY:[0,-1,0],
-  PosZ:[0,0,1], NegZ:[0,0,-1],
-};
-const NEG = { PosX:'NegX', NegX:'PosX', PosY:'NegY', NegY:'PosY', PosZ:'NegZ', NegZ:'PosZ' };
+// A Rubik's Snake is a chain of half-cubes: 24 right-isosceles triangular
+// prisms, alternating upside-down, with each joint rotating the remaining
+// chain around a leg-face hinge.
+const PIECE_SIZE = 1;
+const PIECE_WIDTH = Math.SQRT2 * PIECE_SIZE;
+const LATTICE_X = [1, 0, 0];
+const LATTICE_Y = [0, -1, 0];
+const LATTICE_Z = [0, 0, 1];
+const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,0,1,3];
+const LOCAL_JOINT_CENTER = new THREE.Vector3((3 * PIECE_WIDTH) / 4, PIECE_WIDTH / 4, 0);
 
-function crossDir(a, b) {
-  const va = DIRS[a], vb = DIRS[b];
-  const c = [
-    va[1]*vb[2]-va[2]*vb[1],
-    va[2]*vb[0]-va[0]*vb[2],
-    va[0]*vb[1]-va[1]*vb[0],
+function addInt(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+function scaleInt(a, factor) { return [a[0] * factor, a[1] * factor, a[2] * factor]; }
+function subtractInt(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+function dotInt(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function crossInt(a, b) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
   ];
-  for (const [k,v] of Object.entries(DIRS)) {
-    if (v[0]===c[0] && v[1]===c[1] && v[2]===c[2]) return k;
-  }
-  return 'PosX';
 }
 
-function applyRot(fwd, up, rot) {
-  const right = crossDir(fwd, up);
-  if (rot===0) return up;
-  if (rot===1) return right;
-  if (rot===2) return NEG[up];
-  if (rot===3) return NEG[right];
-  return up;
+function rotateQuarter(value, axis, quarterTurns) {
+  const turn = ((quarterTurns % 4) + 4) % 4;
+  const parallel = scaleInt(axis, dotInt(axis, value));
+  if (turn === 0) return [...value];
+  if (turn === 1) return addInt(crossInt(axis, value), parallel);
+  if (turn === 2) return addInt(scaleInt(value, -1), scaleInt(parallel, 2));
+  return addInt(scaleInt(crossInt(axis, value), -1), parallel);
+}
+
+function nextExactState(state, index, formulaTurn) {
+  const even = index % 2 === 0;
+  const faceSpan = even ? state.a : state.b;
+  const axis = scaleInt(even ? state.b : state.a, -1);
+  const pivot2 = addInt(state.origin2, addInt(faceSpan, state.c));
+  const unrotatedOrigin2 = addInt(state.origin2, scaleInt(faceSpan, 2));
+  const turn = -formulaTurn;
+  return {
+    origin2: addInt(pivot2, rotateQuarter(subtractInt(unrotatedOrigin2, pivot2), axis, turn)),
+    a: rotateQuarter(scaleInt(state.a, -1), axis, turn),
+    b: rotateQuarter(scaleInt(state.b, -1), axis, turn),
+    c: rotateQuarter(state.c, axis, turn),
+  };
+}
+
+function cornerCode(point, cell) {
+  const x = point[0] - cell[0];
+  const y = point[1] - cell[1];
+  const z = point[2] - cell[2];
+  return x | (y << 1) | (z << 2);
+}
+
+function typeFromCorners(corners) {
+  const occupied = new Set(corners);
+  const missing = Array.from({length: 8}, (_, corner) => corner).filter(corner => !occupied.has(corner));
+  const difference = missing[0] ^ missing[1];
+  const edgeAxis = difference === 1 ? 0 : difference === 2 ? 1 : difference === 4 ? 2 : -1;
+  const otherAxes = [0,1,2].filter(axis => axis !== edgeAxis);
+  const fixedBits = ((missing[0] >> otherAxes[0]) & 1)
+    | (((missing[0] >> otherAxes[1]) & 1) << 1);
+  return edgeAxis * 4 + fixedBits;
+}
+
+function complementaryType(type) {
+  return Math.floor(type / 4) * 4 + ((type % 4) ^ 0b11);
+}
+
+function latticeVector(value) {
+  return new THREE.Vector3()
+    .addScaledVector(new THREE.Vector3(Math.SQRT1_2, -Math.SQRT1_2, 0), value[0])
+    .addScaledVector(new THREE.Vector3(Math.SQRT1_2, Math.SQRT1_2, 0), value[1])
+    .addScaledVector(new THREE.Vector3(0, 0, 1), value[2]);
+}
+
+function calculateLatticePieces(pieceCount, config) {
+  const pieces = [];
+  let state = {origin2: [0,0,0], a: [1,0,0], b: [0,-1,0], c: [0,0,1]};
+  for (let index = 0; index < pieceCount; index++) {
+    const origin = state.origin2.map(coordinate => coordinate / 2);
+    const vertices = [
+      origin,
+      addInt(origin, state.a),
+      addInt(origin, state.b),
+      addInt(origin, state.c),
+      addInt(addInt(origin, state.a), state.c),
+      addInt(addInt(origin, state.b), state.c),
+    ];
+    const cell = [
+      Math.min(...vertices.map(vertex => vertex[0])),
+      Math.min(...vertices.map(vertex => vertex[1])),
+      Math.min(...vertices.map(vertex => vertex[2])),
+    ];
+    pieces.push({
+      piece: index + 1,
+      cell,
+      type: typeFromCorners(vertices.map(vertex => cornerCode(vertex, cell))),
+      origin,
+      basis: [state.a, state.b, state.c],
+    });
+    if (index < pieceCount - 1) state = nextExactState(state, index, config[index] ?? 0);
+  }
+  return pieces;
+}
+
+function calculateVisualTransforms(pieceCount, config) {
+  const pieces = calculateLatticePieces(pieceCount, config);
+  const worldOrigin = new THREE.Vector3(
+    Math.SQRT1_2 * PIECE_SIZE - (PIECE_WIDTH * (pieceCount - 1)) / 4,
+    Math.SQRT1_2 * PIECE_SIZE,
+    -PIECE_SIZE / 2
+  );
+  return pieces.map((piece, index) => {
+    const upper = index % 2 === 1;
+    const localOrigin = new THREE.Vector3(PIECE_WIDTH / 2, upper ? 0 : PIECE_WIDTH / 2, -PIECE_SIZE / 2);
+    const localA = upper ? new THREE.Vector3(...LATTICE_X).negate() : new THREE.Vector3(...LATTICE_X);
+    const localB = upper ? new THREE.Vector3(...LATTICE_Y) : new THREE.Vector3(...LATTICE_Y).negate();
+    const localBasis = new THREE.Matrix4()
+      .makeBasis(localA, localB, new THREE.Vector3(...LATTICE_Z))
+      .transpose();
+    const worldBasis = new THREE.Matrix4().makeBasis(
+      latticeVector(piece.basis[0]),
+      latticeVector(piece.basis[1]),
+      latticeVector(piece.basis[2])
+    );
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(worldBasis.multiply(localBasis));
+    const position = worldOrigin.clone()
+      .addScaledVector(new THREE.Vector3(Math.SQRT1_2, -Math.SQRT1_2, 0), piece.origin[0])
+      .addScaledVector(new THREE.Vector3(Math.SQRT1_2, Math.SQRT1_2, 0), piece.origin[1])
+      .addScaledVector(new THREE.Vector3(0, 0, 1), piece.origin[2])
+      .sub(localOrigin.applyQuaternion(quaternion));
+    return {position, quaternion};
+  });
+}
+
+function detectCollisions(pieceCount, config) {
+  const occupied = new Map();
+  const collisions = new Set();
+  calculateLatticePieces(pieceCount, config).forEach(piece => {
+    const key = piece.cell.join(',');
+    const cell = occupied.get(key) ?? [];
+    cell.forEach(other => {
+      if (piece.type !== complementaryType(other.type)) {
+        collisions.add(other.piece - 1);
+        collisions.add(piece.piece - 1);
+      }
+    });
+    cell.push(piece);
+    occupied.set(key, cell);
+  });
+  return collisions;
 }
 
 function snakePositions(config) {
-  let pos = [0,0,0], fwd = 'PosX', up = 'PosY', parity = false;
-  const positions = [pos.slice()];
-  const orientations = [{ fwd, up, parity }];
-  const occupied = new Set();
-  occupied.add(pos.join(','));
-  const collisions = new Set();
-
-  for (let i = 0; i < config.length; i++) {
-    const newUp = applyRot(fwd, up, config[i]);
-    const stepDir = parity ? newUp : fwd;
-    const dv = DIRS[stepDir];
-    pos = [pos[0]+dv[0], pos[1]+dv[1], pos[2]+dv[2]];
-
-    const key = pos.join(',');
-    if (occupied.has(key)) collisions.add(positions.length);
-    occupied.add(key);
-    positions.push(pos.slice());
-
-    if (parity) { const nf = newUp; up = NEG[fwd]; fwd = nf; }
-    else { up = newUp; }
-    parity = !parity;
-    orientations.push({ fwd, up, parity });
-  }
-  return { positions, orientations, collisions };
+  const transforms = calculateVisualTransforms(config.length + 1, config);
+  return {
+    positions: transforms.map(transform => [transform.position.x, transform.position.y, transform.position.z]),
+    orientations: transforms,
+    collisions: detectCollisions(config.length + 1, config),
+  };
 }
 
-function createWedgeGeometry(width = 0.88, length = 0.92) {
-  const halfWidth = width / 2;
-  const halfLength = length / 2;
-  const vertices = new Float32Array([
-    -halfWidth, -halfWidth, -halfLength,
-     halfWidth, -halfWidth, -halfLength,
-    -halfWidth,  halfWidth, -halfLength,
-    -halfWidth, -halfWidth,  halfLength,
-     halfWidth, -halfWidth,  halfLength,
-    -halfWidth,  halfWidth,  halfLength,
-  ]);
-  const indices = [
-    0, 2, 1,  3, 4, 5,
-    0, 1, 4,  0, 4, 3,
-    1, 2, 5,  1, 5, 4,
-    2, 0, 3,  2, 3, 5,
-  ];
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  geometry.setIndex(indices);
+function createPrismGeometry(upper) {
+  const shape = new THREE.Shape();
+  if (upper) {
+    shape.moveTo(0, PIECE_WIDTH / 2);
+    shape.lineTo(PIECE_WIDTH / 2, 0);
+    shape.lineTo(PIECE_WIDTH, PIECE_WIDTH / 2);
+  } else {
+    shape.moveTo(0, 0);
+    shape.lineTo(PIECE_WIDTH, 0);
+    shape.lineTo(PIECE_WIDTH / 2, PIECE_WIDTH / 2);
+  }
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: PIECE_SIZE,
+    steps: 1,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.018,
+    bevelThickness: 0.018,
+    curveSegments: 1,
+  });
+  geometry.translate(-PIECE_WIDTH / 2, -(upper ? PIECE_WIDTH / 3 : PIECE_WIDTH / 6), -PIECE_SIZE / 2);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
   return geometry;
 }
 
+let prismGeometries;
+function getPrismGeometries() {
+  if (!prismGeometries) prismGeometries = [createPrismGeometry(false), createPrismGeometry(true)];
+  return prismGeometries;
+}
+
 function buildSnakeGeometry(group, config, baseColor, darkColor) {
-  while (group.children.length) group.remove(group.children[0]);
+  while (group.children.length) {
+    const child = group.children[group.children.length - 1];
+    group.remove(child);
+    if (child.material) child.material.dispose();
+  }
 
-  const { positions, collisions } = snakePositions(config);
-  const cx = positions.reduce((s,p) => s+p[0], 0) / positions.length;
-  const cy = positions.reduce((s,p) => s+p[1], 0) / positions.length;
-  const cz = positions.reduce((s,p) => s+p[2], 0) / positions.length;
+  const {collisions} = snakePositions(config);
+  const transforms = calculateVisualTransforms(config.length + 1, config);
+  const [lowerPrism, upperPrism] = getPrismGeometries();
+  const boltGeometry = new THREE.CylinderGeometry(0.055, 0.055, 0.88, 12);
+  const boltAxis = new THREE.Vector3(0, 1, 0);
 
-  const wedgeGeo = createWedgeGeometry();
-  const longAxis = new THREE.Vector3(0, 0, 1);
-
-  positions.forEach((p, i) => {
-    const isCollision = collisions.has(i);
-    const mat = new THREE.MeshStandardMaterial({
-      color: isCollision ? 0xc86a55 : (i % 2 === 0 ? baseColor : darkColor),
-      roughness: 0.6,
-      metalness: 0.1,
+  transforms.forEach((transform, index) => {
+    const material = new THREE.MeshStandardMaterial({
+      color: collisions.has(index) ? 0xc86a55 : (index % 2 === 0 ? baseColor : darkColor),
+      roughness: 0.62,
+      metalness: 0.04,
     });
-    const mesh = new THREE.Mesh(wedgeGeo, mat);
-    mesh.position.set(p[0]-cx, p[1]-cy, p[2]-cz);
-
-    const anchor = positions[i + 1] || positions[i - 1];
-    if (anchor) {
-      const direction = new THREE.Vector3(
-        anchor[0] - p[0],
-        anchor[1] - p[1],
-        anchor[2] - p[2]
-      ).normalize();
-      mesh.quaternion.setFromUnitVectors(longAxis, direction);
-    }
+    const mesh = new THREE.Mesh(index % 2 === 0 ? lowerPrism : upperPrism, material);
+    mesh.position.copy(transform.position);
+    mesh.quaternion.copy(transform.quaternion);
     group.add(mesh);
 
-    // Connection cylinder
-    if (i < positions.length - 1) {
-      const np = positions[i+1];
-      const dx = np[0]-p[0], dy = np[1]-p[1], dz = np[2]-p[2];
-      const len = Math.sqrt(dx*dx+dy*dy+dz*dz);
-      if (len > 0) {
-        const cGeo = new THREE.CylinderGeometry(0.12, 0.12, len * 0.3, 6);
-        const cMat = new THREE.MeshStandardMaterial({ color: 0x444466, roughness: 0.8 });
-        const cyl = new THREE.Mesh(cGeo, cMat);
-        cyl.position.set(
-          (p[0]+np[0])/2-cx,
-          (p[1]+np[1])/2-cy,
-          (p[2]+np[2])/2-cz
-        );
-        const dir = new THREE.Vector3(dx,dy,dz).normalize();
-        const up = new THREE.Vector3(0,1,0);
-        if (Math.abs(dir.dot(up)) < 0.99) {
-          const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
-          cyl.quaternion.copy(quat);
-        }
-        group.add(cyl);
-      }
-    }
+    if (index >= transforms.length - 1) return;
+    const jointAxis = new THREE.Vector3(
+      Math.SQRT1_2,
+      (index % 2 === 0 ? 1 : -1) * Math.SQRT1_2,
+      0
+    ).applyQuaternion(transform.quaternion).normalize();
+    const bolt = new THREE.Mesh(
+      boltGeometry,
+      new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.78, metalness: 0.18})
+    );
+    bolt.position.copy(LOCAL_JOINT_CENTER).applyQuaternion(transform.quaternion).add(transform.position);
+    bolt.quaternion.setFromUnitVectors(boltAxis, jointAxis);
+    group.add(bolt);
   });
 }
 
@@ -938,7 +1035,7 @@ heroSnake();
 
 // ─── INTERACTIVE BUILDER ───
 const NUM_JOINTS = 23;
-let builderConfig = Array(NUM_JOINTS).fill(1);
+let builderConfig = Array(NUM_JOINTS).fill(0);
 let builderScene, builderCamera, builderRenderer, builderGroup;
 let builderDrag = false, builderPrevMouse = {x:0,y:0};
 let builderRotX = 0.3, builderRotY = 0;
@@ -1030,6 +1127,13 @@ function buildJointControls() {
 function updateBuilder() {
   buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0x8a6930);
   builderRotX = 0.3;
+  builderGroup.rotation.set(builderRotX, 0, 0);
+
+  const bounds = new THREE.Box3().setFromObject(builderGroup);
+  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
+  const fitDistance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(builderCamera.fov / 2));
+  builderCamera.position.copy(sphere.center).add(new THREE.Vector3(0, sphere.radius * 0.08, fitDistance * 1.12));
+  builderCamera.lookAt(sphere.center);
 
   const { positions, collisions } = snakePositions(builderConfig);
   const isValid = collisions.size === 0;
@@ -1040,7 +1144,8 @@ function updateBuilder() {
     statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>Valid: ${positions.length} wedges, no collisions</span>`;
   } else {
     statusEl.className = 'builder-status status-invalid';
-    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at wedge${collisions.size>1?'s':''} ${[...collisions].join(', ')}</span>`;
+    const collisionLabels = [...collisions].map(index => index + 1).join(', ');
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at wedge${collisions.size>1?'s':''} ${collisionLabels}</span>`;
   }
 
   const display = document.getElementById('config-display');
@@ -1056,13 +1161,13 @@ function randomizeSnake() {
 }
 
 function resetSnake() {
-  builderConfig = Array(NUM_JOINTS).fill(1);
+  builderConfig = Array(NUM_JOINTS).fill(0);
   buildJointControls();
   updateBuilder();
 }
 
 function ballSnake() {
-  builderConfig = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
+  builderConfig = BALL_CONFIG.slice();
   buildJointControls();
   updateBuilder();
 }
