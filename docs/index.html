@@ -557,7 +557,7 @@ footer a:hover { text-decoration: underline; }
   <canvas id="snake-canvas"></canvas>
   <div class="hero-text fade-up">
     <h1>Rubik's <span>Snake</span></h1>
-    <p>First formal verification of the puzzle's state space. 24 wedges, 23 joints, 4 rotations each. 70 trillion possible configurations. How many actually work?</p>
+    <p>First formal verification of the puzzle's state space. 24 triangular prisms, 23 joints, 4 rotations each. 70 trillion possible configurations. How many actually work?</p>
   </div>
   <div class="scroll-cue fade-up fade-up-d2">
     <span>scroll</span>
@@ -762,24 +762,28 @@ function heroSnake() {
   dir2.position.set(-4, 2, -3);
   scene.add(ambient, dir1, dir2);
 
-  // Build a known pretty configuration (ball-ish shape)
-  const config = BALL_CONFIG;
+  // Keep the hero in the canonical straight starting position so the object
+  // reads as a connected snake before the builder demonstrates folded forms.
+  const config = Array(23).fill(0);
   const group = new THREE.Group();
-  group.scale.setScalar(0.68);
-  group.position.set(2.3, 1.05, 0);
-  buildSnakeGeometry(group, config, 0xc8883a, 0x8a6930);
+  group.scale.setScalar(0.30);
+  group.position.set(0, 1.8, 0);
+  buildSnakeGeometry(group, config, 0xc8883a, 0xede8d8);
   scene.add(group);
 
-  // Keep the folded chain in the upper-left visual field, leaving the title
-  // readable while the individual triangular shells remain recognizable.
-  camera.position.set(0, 1.5, 14);
-  camera.lookAt(0, 0, 0);
+  // Keep the chain above the title while preserving enough depth to show the
+  // triangular profile and the dark spring bolts between pieces.
+  camera.position.set(0, 2.4, 14);
+  camera.lookAt(0, 1.6, 0);
 
   function resize() {
     const w = canvas.parentElement.clientWidth;
     const h = canvas.parentElement.clientHeight;
     renderer.setSize(w, h);
-    camera.aspect = w / h;
+    const aspect = w / h;
+    camera.aspect = aspect;
+    camera.position.z = Math.max(14, 14 / Math.min(aspect, 1));
+    camera.lookAt(0, 1.6, 0);
     camera.updateProjectionMatrix();
   }
   resize();
@@ -789,8 +793,8 @@ function heroSnake() {
   (function animate() {
     requestAnimationFrame(animate);
     t += 0.008;
-    group.rotation.y = t;
-    group.rotation.x = Math.sin(t * 0.4) * 0.15;
+    group.rotation.y = t * 0.35;
+    group.rotation.x = Math.sin(t * 0.4) * 0.08;
     renderer.render(scene, camera);
   })();
 }
@@ -959,6 +963,7 @@ function snakePositions(config) {
 }
 
 function createPrismGeometry(upper) {
+  const bevel = 0.024;
   const shape = new THREE.Shape();
   if (upper) {
     shape.moveTo(0, PIECE_WIDTH / 2);
@@ -971,15 +976,20 @@ function createPrismGeometry(upper) {
   }
   shape.closePath();
   const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: PIECE_SIZE,
+    depth: PIECE_SIZE - bevel * 2,
     steps: 1,
     bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.018,
-    bevelThickness: 0.018,
+    bevelSegments: 4,
+    bevelSize: bevel,
+    bevelThickness: bevel,
+    bevelOffset: -bevel,
     curveSegments: 1,
   });
-  geometry.translate(-PIECE_WIDTH / 2, -(upper ? PIECE_WIDTH / 3 : PIECE_WIDTH / 6), -PIECE_SIZE / 2);
+  const centerX = PIECE_WIDTH / 2;
+  const centerY = upper ? PIECE_WIDTH / 3 : PIECE_WIDTH / 6;
+  geometry.translate(-centerX, -centerY, -(PIECE_SIZE - bevel * 2) / 2);
+  geometry.scale(0.992, 0.992, 0.992);
+  geometry.translate(centerX, centerY, 0);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   return geometry;
@@ -1001,7 +1011,7 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
   const {collisions} = snakePositions(config);
   const transforms = calculateVisualTransforms(config.length + 1, config);
   const [lowerPrism, upperPrism] = getPrismGeometries();
-  const boltGeometry = new THREE.CylinderGeometry(0.055, 0.055, 0.88, 12);
+  const boltGeometry = new THREE.CylinderGeometry(0.075, 0.075, 1.04, 12);
   const boltAxis = new THREE.Vector3(0, 1, 0);
 
   transforms.forEach((transform, index) => {
@@ -1023,7 +1033,7 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
     ).applyQuaternion(transform.quaternion).normalize();
     const bolt = new THREE.Mesh(
       boltGeometry,
-      new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.78, metalness: 0.18})
+      new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.72, metalness: 0.28})
     );
     bolt.position.copy(LOCAL_JOINT_CENTER).applyQuaternion(transform.quaternion).add(transform.position);
     bolt.quaternion.setFromUnitVectors(boltAxis, jointAxis);
@@ -1125,7 +1135,7 @@ function buildJointControls() {
 }
 
 function updateBuilder() {
-  buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0x8a6930);
+  buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0xede8d8);
   builderRotX = 0.3;
   builderGroup.rotation.set(builderRotX, 0, 0);
 
@@ -1141,11 +1151,11 @@ function updateBuilder() {
   const statusEl = document.getElementById('builder-status');
   if (isValid) {
     statusEl.className = 'builder-status status-valid';
-    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>Valid: ${positions.length} wedges, no collisions</span>`;
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>Valid: ${positions.length} prisms, no collisions</span>`;
   } else {
     statusEl.className = 'builder-status status-invalid';
     const collisionLabels = [...collisions].map(index => index + 1).join(', ');
-    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at wedge${collisions.size>1?'s':''} ${collisionLabels}</span>`;
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at prism${collisions.size>1?'s':''} ${collisionLabels}</span>`;
   }
 
   const display = document.getElementById('config-display');
