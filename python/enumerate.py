@@ -7,11 +7,12 @@ configurations. Results for small N cross-validate the Coq proofs and TLA+ model
 
 Usage:
     python3 enumerate.py --wedges 8
+    python3 enumerate.py --wedges 24 --prefix 0,1,3
     python3 enumerate.py --wedges 24 --parallel  # full puzzle, needs hours
 """
 
 import argparse
-from typing import NamedTuple
+from typing import NamedTuple, Optional, Sequence, Tuple
 from collections import defaultdict
 
 # Direction vectors
@@ -60,52 +61,125 @@ def vec_add(a, b):
     return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
 
 
-def enumerate_snakes(num_wedges: int) -> dict:
-    """Count valid configurations via backtracking."""
+def parse_prefix(value: str) -> Tuple[int, ...]:
+    """Parse a comma-separated rotation prefix for the command-line interface."""
+    if not value.strip():
+        return ()
+
+    try:
+        prefix = tuple(int(part.strip()) for part in value.split(','))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            'prefix must be comma-separated rotation numbers in the range 0..3'
+        ) from exc
+
+    if any(rotation not in range(4) for rotation in prefix):
+        raise argparse.ArgumentTypeError(
+            'prefix must be comma-separated rotation numbers in the range 0..3'
+        )
+    return prefix
+
+
+def _advance_state(pos, fwd: str, up: str, parity: bool, rot: int):
+    """Advance one joint and return the next position/orientation state."""
+    new_up = apply_rotation(Orientation(fwd, up), rot)
+    step_dir = new_up if parity else fwd
+    new_pos = vec_add(pos, DIRS[step_dir])
+
+    if parity:
+        next_fwd = new_up
+        next_up = NEG[fwd]
+    else:
+        next_fwd = fwd
+        next_up = new_up
+
+    return new_pos, next_fwd, next_up, not parity
+
+
+def enumerate_snakes(
+    num_wedges: int,
+    prefix: Optional[Sequence[int]] = None,
+) -> dict:
+    """Count valid configurations via backtracking.
+
+    ``prefix`` fixes the rotations at the first joints and enumerates only the
+    remaining suffix. This makes a large search reproducibly shardable: the
+    four one-rotation prefixes are disjoint and cover the root search space.
+    """
+    if not isinstance(num_wedges, int) or isinstance(num_wedges, bool) or num_wedges < 1:
+        raise ValueError('num_wedges must be a positive integer')
+
     num_joints = num_wedges - 1
+    prefix = tuple(prefix or ())
+    if len(prefix) > num_joints:
+        raise ValueError('prefix cannot contain more rotations than the snake has joints')
+    if any(
+        not isinstance(rotation, int)
+        or isinstance(rotation, bool)
+        or rotation not in range(4)
+        for rotation in prefix
+    ):
+        raise ValueError('prefix rotations must be integers in the range 0..3')
+
     valid_count = 0
     closed_count = 0
+    start = (0, 0, 0)
+    pos = start
+    fwd = 'PosX'
+    up = 'PosY'
+    parity = False
+    occupied = {start}
+
+    # Materialize the requested prefix before entering the recursive search.
+    # An invalid prefix owns an empty valid subspace, but still reports the
+    # suffix size so shard totals remain auditable.
+    for rot in prefix:
+        pos, fwd, up, parity = _advance_state(pos, fwd, up, parity, rot)
+        if pos in occupied:
+            return {
+                'wedges': num_wedges,
+                'joints': num_joints,
+                'prefix': list(prefix),
+                'unconstrained': 4 ** (num_joints - len(prefix)),
+                'valid': 0,
+                'closed_loops': 0,
+                'invalid_pct': '100.00%',
+            }
+        occupied.add(pos)
 
     def backtrack(depth, pos, fwd, up, parity, occupied):
         nonlocal valid_count, closed_count
 
         if depth == num_joints:
             valid_count += 1
-            if pos == (0, 0, 0):
+            if pos == start:
                 closed_count += 1
             return
 
         for rot in range(4):
-            new_up = apply_rotation(Orientation(fwd, up), rot)
-            step_dir = new_up if parity else fwd
-            new_pos = vec_add(pos, DIRS[step_dir])
+            new_pos, next_fwd, next_up, next_parity = _advance_state(
+                pos, fwd, up, parity, rot
+            )
 
             if new_pos in occupied:
                 continue
 
-            # Compute next orientation
-            if parity:
-                next_fwd = new_up
-                next_up = NEG[fwd]
-            else:
-                next_fwd = fwd
-                next_up = new_up
-
             occupied.add(new_pos)
-            backtrack(depth + 1, new_pos, next_fwd, next_up, not parity, occupied)
+            backtrack(depth + 1, new_pos, next_fwd, next_up, next_parity, occupied)
             occupied.remove(new_pos)
 
-    start = (0, 0, 0)
-    occupied = {start}
-    backtrack(0, start, 'PosX', 'PosY', False, occupied)
+    backtrack(len(prefix), pos, fwd, up, parity, occupied)
+
+    unconstrained = 4 ** (num_joints - len(prefix))
 
     return {
         'wedges': num_wedges,
         'joints': num_joints,
-        'unconstrained': 4 ** num_joints,
+        'prefix': list(prefix),
+        'unconstrained': unconstrained,
         'valid': valid_count,
         'closed_loops': closed_count,
-        'invalid_pct': f"{(1 - valid_count / 4**num_joints) * 100:.2f}%",
+        'invalid_pct': f"{(1 - valid_count / unconstrained) * 100:.2f}%",
     }
 
 
@@ -113,13 +187,24 @@ def main():
     parser = argparse.ArgumentParser(description='Rubik\'s Snake enumerator')
     parser.add_argument('--wedges', type=int, default=8,
                         help='Number of wedges (default: 8, standard: 24)')
+    parser.add_argument(
+        '--prefix',
+        type=parse_prefix,
+        default=(),
+        metavar='R0,R1,...',
+        help='Fixed joint rotations for a reproducible search shard (values 0..3)',
+    )
     args = parser.parse_args()
 
     print(f"Enumerating {args.wedges}-wedge Rubik's Snake...")
-    print(f"Unconstrained state space: 4^{args.wedges-1} = {4**(args.wedges-1):,}")
+    remaining_joints = args.wedges - 1 - len(args.prefix)
+    if args.prefix:
+        prefix_text = ','.join(str(rotation) for rotation in args.prefix)
+        print(f"Fixed prefix: {prefix_text}")
+    print(f"Unconstrained state space: 4^{remaining_joints} = {4**remaining_joints:,}")
     print()
 
-    results = enumerate_snakes(args.wedges)
+    results = enumerate_snakes(args.wedges, args.prefix)
 
     print(f"Results for {results['wedges']} wedges ({results['joints']} joints):")
     print(f"  Unconstrained configs: {results['unconstrained']:>20,}")
