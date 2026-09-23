@@ -819,9 +819,12 @@ function heroSnake() {
   function animate(now) {
     requestAnimationFrame(animate);
     const t = now * 0.001;
-    group.rotation.y = 0.18 + t * 0.35;
-    group.rotation.x = -0.18 + Math.sin(t * 0.4) * 0.08;
-    group.rotation.z = Math.sin(t * 0.3) * 0.025;
+    // Keep the canonical chain readable while it gently turns. An unbounded
+    // spin eventually points the long model at the camera and crops it out of
+    // the hero frame, hiding the connected wedges that identify the puzzle.
+    group.rotation.y = 0.22 + Math.sin(t * 0.35) * 0.42;
+    group.rotation.x = -0.22 + Math.sin(t * 0.28) * 0.05;
+    group.rotation.z = Math.sin(t * 0.22) * 0.04;
     renderer.render(scene, camera);
   }
   requestAnimationFrame(animate);
@@ -836,7 +839,6 @@ const LATTICE_X = [1, 0, 0];
 const LATTICE_Y = [0, -1, 0];
 const LATTICE_Z = [0, 0, 1];
 const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,0,1,3];
-const LOCAL_JOINT_CENTER = new THREE.Vector3((3 * PIECE_WIDTH) / 4, PIECE_WIDTH / 4, 0);
 
 function addInt(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
 function scaleInt(a, factor) { return [a[0] * factor, a[1] * factor, a[2] * factor]; }
@@ -1042,7 +1044,7 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
   // The real puzzle has a compact hinge pin at each joint. A full-length
   // cylinder reads as a rod hanging below the chain, which makes the model
   // look like a row of wedges instead of one connected snake.
-  const jointGeometry = new THREE.CylinderGeometry(0.13, 0.13, 0.12, 16);
+  const jointGeometry = new THREE.CylinderGeometry(0.11, 0.11, 0.14, 16);
   const boltAxis = new THREE.Vector3(0, 1, 0);
 
   transforms.forEach((transform, index) => {
@@ -1057,16 +1059,21 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
     group.add(mesh);
 
     if (index >= transforms.length - 1) return;
-    const jointAxis = new THREE.Vector3(
-      Math.SQRT1_2,
-      (index % 2 === 0 ? 1 : -1) * Math.SQRT1_2,
-      0
-    ).applyQuaternion(transform.quaternion).normalize();
+    // Each spring bolt runs through the shared long leg of the two
+    // neighboring triangular prisms. The shared leg is the prism's local Z
+    // edge; the previous diagonal anchor floated inside the pieces and made
+    // the links look detached in perspective.
+    const jointAnchor = index % 2 === 0
+      ? new THREE.Vector3(PIECE_WIDTH, 0, 0)
+      : new THREE.Vector3(PIECE_WIDTH, PIECE_WIDTH / 2, 0);
+    const jointAxis = new THREE.Vector3(0, 0, 1)
+      .applyQuaternion(transform.quaternion)
+      .normalize();
     const joint = new THREE.Mesh(
       jointGeometry,
       new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.72, metalness: 0.28})
     );
-    joint.position.copy(LOCAL_JOINT_CENTER).applyQuaternion(transform.quaternion).add(transform.position);
+    joint.position.copy(jointAnchor).applyQuaternion(transform.quaternion).add(transform.position);
     joint.quaternion.setFromUnitVectors(boltAxis, jointAxis);
     group.add(joint);
   });
