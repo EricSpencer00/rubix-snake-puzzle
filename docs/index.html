@@ -793,8 +793,8 @@ function heroSnake() {
   (function animate() {
     requestAnimationFrame(animate);
     t += 0.008;
-    group.rotation.y = t * 0.35;
-    group.rotation.x = MODEL_FLIP + Math.sin(t * 0.4) * 0.08;
+    group.rotation.y = 0.18 + t * 0.35;
+    group.rotation.x = -0.18 + Math.sin(t * 0.4) * 0.08;
     renderer.render(scene, camera);
   })();
 }
@@ -807,7 +807,6 @@ const PIECE_WIDTH = Math.SQRT2 * PIECE_SIZE;
 const LATTICE_X = [1, 0, 0];
 const LATTICE_Y = [0, -1, 0];
 const LATTICE_Z = [0, 0, 1];
-const MODEL_FLIP = Math.PI;
 const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,0,1,3];
 const LOCAL_JOINT_CENTER = new THREE.Vector3((3 * PIECE_WIDTH) / 4, PIECE_WIDTH / 4, 0);
 
@@ -1012,7 +1011,10 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
   const {collisions} = snakePositions(config);
   const transforms = calculateVisualTransforms(config.length + 1, config);
   const [lowerPrism, upperPrism] = getPrismGeometries();
-  const boltGeometry = new THREE.CylinderGeometry(0.075, 0.075, 1.04, 12);
+  // The real puzzle has a compact hinge pin at each joint. A full-length
+  // cylinder reads as a rod hanging below the chain, which makes the model
+  // look like a row of wedges instead of one connected snake.
+  const jointGeometry = new THREE.CylinderGeometry(0.13, 0.13, 0.12, 16);
   const boltAxis = new THREE.Vector3(0, 1, 0);
 
   transforms.forEach((transform, index) => {
@@ -1032,13 +1034,13 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
       (index % 2 === 0 ? 1 : -1) * Math.SQRT1_2,
       0
     ).applyQuaternion(transform.quaternion).normalize();
-    const bolt = new THREE.Mesh(
-      boltGeometry,
+    const joint = new THREE.Mesh(
+      jointGeometry,
       new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.72, metalness: 0.28})
     );
-    bolt.position.copy(LOCAL_JOINT_CENTER).applyQuaternion(transform.quaternion).add(transform.position);
-    bolt.quaternion.setFromUnitVectors(boltAxis, jointAxis);
-    group.add(bolt);
+    joint.position.copy(LOCAL_JOINT_CENTER).applyQuaternion(transform.quaternion).add(transform.position);
+    joint.quaternion.setFromUnitVectors(boltAxis, jointAxis);
+    group.add(joint);
   });
 }
 
@@ -1049,7 +1051,7 @@ const NUM_JOINTS = 23;
 let builderConfig = Array(NUM_JOINTS).fill(0);
 let builderScene, builderCamera, builderRenderer, builderGroup;
 let builderDrag = false, builderPrevMouse = {x:0,y:0};
-let builderRotX = MODEL_FLIP + 0.3, builderRotY = 0;
+let builderRotX = 0.3, builderRotY = 0;
 
 (function initBuilder() {
   const canvas = document.getElementById('builder-canvas');
@@ -1137,7 +1139,7 @@ function buildJointControls() {
 
 function updateBuilder() {
   buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0xede8d8);
-  builderRotX = MODEL_FLIP + 0.3;
+  builderRotX = 0.3;
   builderGroup.rotation.set(builderRotX, 0, 0);
 
   const bounds = new THREE.Box3().setFromObject(builderGroup);
