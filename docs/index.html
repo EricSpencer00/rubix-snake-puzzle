@@ -793,7 +793,7 @@ function heroSnake() {
   // reads as a connected snake before the builder demonstrates folded forms.
   const config = Array(23).fill(0);
   const group = new THREE.Group();
-  group.scale.setScalar(0.30);
+  group.scale.setScalar(0.48);
   group.position.set(0, 1.8, 0);
   buildSnakeGeometry(group, config, 0xc8883a, 0xede8d8);
   scene.add(group);
@@ -833,11 +833,6 @@ function heroSnake() {
 // A Rubik's Snake is a chain of half-cubes: 24 right-isosceles triangular
 // prisms, alternating upside-down, with each joint rotating the remaining
 // chain around a leg-face hinge.
-const PIECE_SIZE = 1;
-const PIECE_WIDTH = Math.SQRT2 * PIECE_SIZE;
-const LATTICE_X = [1, 0, 0];
-const LATTICE_Y = [0, -1, 0];
-const LATTICE_Z = [0, 0, 1];
 const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,0,1,3];
 
 function addInt(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
@@ -929,40 +924,11 @@ function calculateLatticePieces(pieceCount, config) {
       type: typeFromCorners(vertices.map(vertex => cornerCode(vertex, cell))),
       origin,
       basis: [state.a, state.b, state.c],
+      vertices,
     });
     if (index < pieceCount - 1) state = nextExactState(state, index, config[index] ?? 0);
   }
   return pieces;
-}
-
-function calculateVisualTransforms(pieceCount, config) {
-  const pieces = calculateLatticePieces(pieceCount, config);
-  const worldOrigin = new THREE.Vector3(
-    Math.SQRT1_2 * PIECE_SIZE - (PIECE_WIDTH * (pieceCount - 1)) / 4,
-    Math.SQRT1_2 * PIECE_SIZE,
-    -PIECE_SIZE / 2
-  );
-  return pieces.map((piece, index) => {
-    const upper = index % 2 === 1;
-    const localOrigin = new THREE.Vector3(PIECE_WIDTH / 2, upper ? 0 : PIECE_WIDTH / 2, -PIECE_SIZE / 2);
-    const localA = upper ? new THREE.Vector3(...LATTICE_X).negate() : new THREE.Vector3(...LATTICE_X);
-    const localB = upper ? new THREE.Vector3(...LATTICE_Y) : new THREE.Vector3(...LATTICE_Y).negate();
-    const localBasis = new THREE.Matrix4()
-      .makeBasis(localA, localB, new THREE.Vector3(...LATTICE_Z))
-      .transpose();
-    const worldBasis = new THREE.Matrix4().makeBasis(
-      latticeVector(piece.basis[0]),
-      latticeVector(piece.basis[1]),
-      latticeVector(piece.basis[2])
-    );
-    const quaternion = new THREE.Quaternion().setFromRotationMatrix(worldBasis.multiply(localBasis));
-    const position = worldOrigin.clone()
-      .addScaledVector(new THREE.Vector3(Math.SQRT1_2, -Math.SQRT1_2, 0), piece.origin[0])
-      .addScaledVector(new THREE.Vector3(Math.SQRT1_2, Math.SQRT1_2, 0), piece.origin[1])
-      .addScaledVector(new THREE.Vector3(0, 0, 1), piece.origin[2])
-      .sub(localOrigin.applyQuaternion(quaternion));
-    return {position, quaternion};
-  });
 }
 
 function detectCollisions(pieceCount, config) {
@@ -984,98 +950,115 @@ function detectCollisions(pieceCount, config) {
 }
 
 function snakePositions(config) {
-  const transforms = calculateVisualTransforms(config.length + 1, config);
+  const pieces = calculateLatticePieces(config.length + 1, config);
   return {
-    positions: transforms.map(transform => [transform.position.x, transform.position.y, transform.position.z]),
-    orientations: transforms,
+    positions: pieces.map(piece => {
+      const points = piece.vertices.map(latticeVector);
+      const center = new THREE.Box3().setFromPoints(points).getCenter(new THREE.Vector3());
+      return [center.x, center.y, center.z];
+    }),
     collisions: detectCollisions(config.length + 1, config),
   };
 }
 
-function createPrismGeometry(upper) {
-  const bevel = 0.024;
-  const shape = new THREE.Shape();
-  if (upper) {
-    shape.moveTo(0, PIECE_WIDTH / 2);
-    shape.lineTo(PIECE_WIDTH / 2, 0);
-    shape.lineTo(PIECE_WIDTH, PIECE_WIDTH / 2);
-  } else {
-    shape.moveTo(0, 0);
-    shape.lineTo(PIECE_WIDTH, 0);
-    shape.lineTo(PIECE_WIDTH / 2, PIECE_WIDTH / 2);
-  }
-  shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: PIECE_SIZE - bevel * 2,
-    steps: 1,
-    bevelEnabled: true,
-    bevelSegments: 4,
-    bevelSize: bevel,
-    bevelThickness: bevel,
-    bevelOffset: -bevel,
-    curveSegments: 1,
-  });
-  const centerX = PIECE_WIDTH / 2;
-  const centerY = upper ? PIECE_WIDTH / 3 : PIECE_WIDTH / 6;
-  geometry.translate(-centerX, -centerY, -(PIECE_SIZE - bevel * 2) / 2);
-  geometry.scale(0.992, 0.992, 0.992);
-  geometry.translate(centerX, centerY, 0);
+function createLatticePrismGeometry(vertices, hiddenFaces = []) {
+  // The enumerator already describes each prism by its six physical corner
+  // points. Rendering those points directly guarantees that neighboring
+  // prisms share the same rectangular hinge face in every configuration.
+  const positions = vertices.flatMap(vertex => [vertex.x, vertex.y, vertex.z]);
+  const faces = [
+    [0, 2, 1], [3, 4, 5],
+    [0, 1, 4, 3], [1, 2, 5, 4], [2, 0, 3, 5],
+  ].filter(face => !hiddenFaces.some(hidden =>
+    hidden.length === face.length && face.every(index => hidden.includes(index))
+  ));
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(faces.flatMap(face => face.length === 3
+    ? face
+    : [face[0], face[1], face[2], face[0], face[2], face[3]]
+  ));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   return geometry;
-}
-
-let prismGeometries;
-function getPrismGeometries() {
-  if (!prismGeometries) prismGeometries = [createPrismGeometry(false), createPrismGeometry(true)];
-  return prismGeometries;
 }
 
 function buildSnakeGeometry(group, config, baseColor, darkColor) {
   while (group.children.length) {
     const child = group.children[group.children.length - 1];
     group.remove(child);
+    if (child.geometry) child.geometry.dispose();
     if (child.material) child.material.dispose();
   }
 
+  const pieces = calculateLatticePieces(config.length + 1, config);
   const {collisions} = snakePositions(config);
-  const transforms = calculateVisualTransforms(config.length + 1, config);
-  const [lowerPrism, upperPrism] = getPrismGeometries();
-  // The real puzzle has a compact hinge pin at each joint. A full-length
-  // cylinder reads as a rod hanging below the chain, which makes the model
-  // look like a row of wedges instead of one connected snake.
-  const jointGeometry = new THREE.CylinderGeometry(0.11, 0.11, 0.14, 16);
+  const worldPieces = pieces.map(piece => piece.vertices.map(latticeVector));
+  const allPoints = worldPieces.flat();
+  const center = new THREE.Box3().setFromPoints(allPoints).getCenter(new THREE.Vector3());
+  // The spring bolt passes through the center of the shared leg face. It is
+  // short and perpendicular to that face; placing it along an edge makes it
+  // look like a loose rod underneath the snake.
+  const jointGeometry = new THREE.CylinderGeometry(0.105, 0.105, 0.28, 16);
   const boltAxis = new THREE.Vector3(0, 1, 0);
+  const edgeMaterial = new THREE.LineBasicMaterial({color: 0x6b492c, transparent: true, opacity: 0.7});
+  const sharedFaces = worldPieces.slice(0, -1).map((first, index) => {
+    const second = worldPieces[index + 1];
+    const points = first.filter(point =>
+      second.some(other => point.distanceToSquared(other) < 1e-8)
+    );
+    if (points.length !== 4) return null;
+    return {
+      points,
+      firstIndices: points.map(point => first.findIndex(other => point.distanceToSquared(other) < 1e-8)),
+      secondIndices: points.map(point => second.findIndex(other => point.distanceToSquared(other) < 1e-8)),
+    };
+  });
 
-  transforms.forEach((transform, index) => {
+  worldPieces.forEach((vertices, index) => {
+    const localVertices = vertices.map(vertex => vertex.clone().sub(center));
+    const hiddenFaces = [];
+    if (sharedFaces[index - 1]) hiddenFaces.push(sharedFaces[index - 1].secondIndices);
+    if (sharedFaces[index]) hiddenFaces.push(sharedFaces[index].firstIndices);
+    const geometry = createLatticePrismGeometry(localVertices, hiddenFaces);
     const material = new THREE.MeshStandardMaterial({
       color: collisions.has(index) ? 0xc86a55 : (index % 2 === 0 ? baseColor : darkColor),
-      roughness: 0.62,
-      metalness: 0.04,
+      roughness: 0.48,
+      metalness: 0.08,
+      flatShading: true,
+      side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(index % 2 === 0 ? lowerPrism : upperPrism, material);
-    mesh.position.copy(transform.position);
-    mesh.quaternion.copy(transform.quaternion);
+    const mesh = new THREE.Mesh(geometry, material);
     group.add(mesh);
+    group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 35), edgeMaterial));
 
-    if (index >= transforms.length - 1) return;
-    // Each spring bolt runs through the shared long leg of the two
-    // neighboring triangular prisms. The shared leg is the prism's local Z
-    // edge; the previous diagonal anchor floated inside the pieces and made
-    // the links look detached in perspective.
-    const jointAnchor = index % 2 === 0
-      ? new THREE.Vector3(PIECE_WIDTH, 0, 0)
-      : new THREE.Vector3(PIECE_WIDTH, PIECE_WIDTH / 2, 0);
-    const jointAxis = new THREE.Vector3(0, 0, 1)
-      .applyQuaternion(transform.quaternion)
-      .normalize();
+    if (index >= worldPieces.length - 1) return;
+    const sharedFace = sharedFaces[index];
+    if (!sharedFace) return;
+    const faceCenter = sharedFace.points.reduce((sum, point) => sum.add(point), new THREE.Vector3())
+      .multiplyScalar(0.25)
+      .sub(center);
+    const firstEdge = sharedFace.points[1].clone().sub(sharedFace.points[0]);
+    const secondEdge = sharedFace.points.slice(2)
+      .map(point => point.clone().sub(sharedFace.points[0]))
+      .find(edge => Math.abs(firstEdge.dot(edge)) < 1e-8);
+    if (!secondEdge) return;
+    const jointAxis = firstEdge.cross(secondEdge).normalize();
     const joint = new THREE.Mesh(
       jointGeometry,
-      new THREE.MeshStandardMaterial({color: 0x34344a, roughness: 0.72, metalness: 0.28})
+      new THREE.MeshStandardMaterial({color: 0x29283a, roughness: 0.62, metalness: 0.42})
     );
-    joint.position.copy(jointAnchor).applyQuaternion(transform.quaternion).add(transform.position);
+    joint.position.copy(faceCenter);
     joint.quaternion.setFromUnitVectors(boltAxis, jointAxis);
     group.add(joint);
+
+    const capGeometry = new THREE.CylinderGeometry(0.135, 0.135, 0.045, 16);
+    [-1, 1].forEach(side => {
+      const cap = new THREE.Mesh(capGeometry, joint.material.clone());
+      cap.position.copy(faceCenter).addScaledVector(jointAxis, side * 0.15);
+      cap.quaternion.copy(joint.quaternion);
+      group.add(cap);
+    });
   });
 }
 
