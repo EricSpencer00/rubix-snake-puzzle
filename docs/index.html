@@ -56,6 +56,8 @@ body { overflow-x: hidden; }
 #snake-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 0;
 }
 
@@ -283,7 +285,7 @@ h2 .num {
 
 .builder-wrap {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 2rem;
   align-items: start;
 }
@@ -293,12 +295,15 @@ h2 .num {
 }
 
 #builder-canvas {
+  display: block;
   width: 100%;
+  min-width: 0;
   aspect-ratio: 4/3;
   border-radius: 8px;
   border: 1px solid var(--surf-edge);
   background: var(--surf-raise);
   cursor: grab;
+  touch-action: none;
 }
 
 #builder-canvas:active { cursor: grabbing; }
@@ -307,6 +312,20 @@ h2 .num {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  min-width: 0;
+}
+
+.builder-preview { min-width: 0; position: sticky; top: 1rem; }
+.view-controls { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; margin-top: 0.7rem; font-size: 0.7rem; color: var(--text-dim); }
+#joint-controls { max-height: 340px; overflow-y: auto; padding: 2px 8px 2px 2px; }
+button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+@media (max-width: 740px) {
+  .builder-preview { position: static; }
+  #joint-controls { max-height: 280px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .scroll-cue { animation: none; }
 }
 
 .control-row {
@@ -618,11 +637,14 @@ footer a:hover { text-decoration: underline; }
   <p class="prose">Choose a rotation at each joint. The 3D model updates in real time. Red highlights mark collisions. Click randomize to explore the space.</p>
 
   <div class="builder-wrap">
-    <canvas id="builder-canvas"></canvas>
+    <div class="builder-preview">
+      <canvas id="builder-canvas" tabindex="0" role="img" aria-label="24 connected triangular prisms. Drag or use arrow keys to rotate the view."></canvas>
+      <div class="view-controls"><span>Drag or use arrow keys to rotate</span><button class="rot-btn" id="spin-view" type="button" aria-pressed="false">Spin view</button></div>
+    </div>
     <div class="builder-controls">
       <div id="joint-controls"></div>
       <div class="config-display" id="config-display"></div>
-      <div class="builder-status status-valid" id="builder-status">
+      <div class="builder-status status-valid" id="builder-status" role="status" aria-live="polite">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg>
         <span>Valid configuration</span>
       </div>
@@ -765,6 +787,17 @@ function show3DFallback(canvas, message) {
   canvas.replaceWith(fallback);
 }
 
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function addSnakeLighting(scene) {
+  scene.add(new THREE.HemisphereLight(0xf5f0e6, 0x47455d, 0.65));
+  const key = new THREE.DirectionalLight(0xfff2df, 0.8);
+  key.position.set(-3, 6, 8);
+  const fill = new THREE.DirectionalLight(0xc4d5f2, 0.35);
+  fill.position.set(4, 1, -4);
+  scene.add(key, fill);
+}
+
 function heroSnake() {
   const canvas = document.getElementById('snake-canvas');
   let renderer;
@@ -776,38 +809,37 @@ function heroSnake() {
     return;
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
   camera.position.set(0, 2, 12);
   camera.lookAt(0, 0, 0);
 
-  const ambient = new THREE.AmbientLight(0xede8d8, 0.4);
-  const dir1 = new THREE.DirectionalLight(0xc8883a, 0.8);
-  dir1.position.set(5, 8, 4);
-  const dir2 = new THREE.DirectionalLight(0x6a7ec8, 0.4);
-  dir2.position.set(-4, 2, -3);
-  scene.add(ambient, dir1, dir2);
+  addSnakeLighting(scene);
 
   // Keep the hero in the canonical straight starting position so the object
   // reads as a connected snake before the builder demonstrates folded forms.
   const config = Array(23).fill(0);
   const group = new THREE.Group();
-  group.scale.setScalar(0.48);
-  group.position.set(0, 1.8, 0);
+  // Yaw after pitch: otherwise yaw tilts the long axis vertically and lets
+  // the bar sweep through the title as the animation runs.
+  group.rotation.order = 'YXZ';
+  group.scale.setScalar(0.6);
+  group.position.set(0, 2.4, 0);
   buildSnakeGeometry(group, config, 0xc8883a, 0xede8d8);
   scene.add(group);
 
-  // Keep the chain above the title while preserving enough depth to show the
-  // triangular profile and the dark spring bolts between pieces.
+  // Keep the chain above the title with both the triangles and depth visible.
   camera.position.set(0, 2.4, 14);
   camera.lookAt(0, 1.6, 0);
 
   function resize() {
     const w = canvas.parentElement.clientWidth;
     const h = canvas.parentElement.clientHeight;
-    renderer.setSize(w, h);
+    renderer.setSize(w, h, false);
     const aspect = w / h;
+    group.scale.setScalar(aspect < 1 ? 0.52 : 0.6);
     camera.aspect = aspect;
     camera.position.z = Math.max(14, 14 / Math.min(aspect, 1));
     camera.lookAt(0, 1.6, 0);
@@ -818,12 +850,12 @@ function heroSnake() {
 
   function animate(now) {
     requestAnimationFrame(animate);
-    const t = now * 0.001;
+    const t = reducedMotion.matches ? 0 : now * 0.001;
     // Keep the canonical chain readable while it gently turns. An unbounded
     // spin eventually points the long model at the camera and crops it out of
     // the hero frame, hiding the connected wedges that identify the puzzle.
     group.rotation.y = 0.22 + Math.sin(t * 0.35) * 0.42;
-    group.rotation.x = -0.22 + Math.sin(t * 0.28) * 0.05;
+    group.rotation.x = 0.45 + Math.sin(t * 0.28) * 0.08;
     group.rotation.z = Math.sin(t * 0.22) * 0.04;
     renderer.render(scene, camera);
   }
@@ -833,7 +865,9 @@ function heroSnake() {
 // A Rubik's Snake is a chain of half-cubes: 24 right-isosceles triangular
 // prisms, alternating upside-down, with each joint rotating the remaining
 // chain around a leg-face hinge.
-const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,0,1,3];
+// James Straughan's ball sequence, ordered by joint (piece number minus 2):
+// https://sites.google.com/site/athefre/other-puzzles/rubiks-snake
+const BALL_CONFIG = [3,3,1,3,1,1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,1,1,3];
 
 function addInt(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
 function scaleInt(a, factor) { return [a[0] * factor, a[1] * factor, a[2] * factor]; }
@@ -961,23 +995,45 @@ function snakePositions(config) {
   };
 }
 
-function createLatticePrismGeometry(vertices, hiddenFaces = []) {
-  // The enumerator already describes each prism by its six physical corner
-  // points. Rendering those points directly guarantees that neighboring
-  // prisms share the same rectangular hinge face in every configuration.
-  const positions = vertices.flatMap(vertex => [vertex.x, vertex.y, vertex.z]);
-  const faces = [
-    [0, 2, 1], [3, 4, 5],
-    [0, 1, 4, 3], [1, 2, 5, 4], [2, 0, 3, 5],
-  ].filter(face => !hiddenFaces.some(hidden =>
-    hidden.length === face.length && face.every(index => hidden.includes(index))
-  ));
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex(faces.flatMap(face => face.length === 3
-    ? face
-    : [face[0], face[1], face[2], face[0], face[2], face[3]]
-  ));
+function createLatticePrismGeometry(vertices) {
+  // The physical solid is a half-cube. Inset the plastic very slightly from
+  // its exact collision envelope to expose the seams without separating it.
+  const bevel = 0.018;
+  const clearance = 0.004;
+  const inset = bevel + clearance;
+  const tip = 1 - (1 + Math.SQRT2) * inset;
+  const triangle = new THREE.Shape();
+  triangle.moveTo(inset, inset);
+  triangle.lineTo(tip, inset);
+  triangle.lineTo(inset, tip);
+  triangle.closePath();
+  const geometry = new THREE.ExtrudeGeometry(triangle, {
+    depth: 1 - 2 * inset, steps: 1, bevelEnabled: true,
+    bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1,
+  });
+  geometry.translate(0, 0, inset);
+  const basis = new THREE.Matrix4().makeBasis(
+    vertices[1].clone().sub(vertices[0]),
+    vertices[2].clone().sub(vertices[0]),
+    vertices[3].clone().sub(vertices[0])
+  );
+  basis.setPosition(vertices[0]);
+  geometry.applyMatrix4(basis);
+  // This lattice has a left-handed basis. A reflection is NOT a quaternion:
+  // preserve all corner coordinates, then correct the triangle winding.
+  if (basis.determinant() < 0) {
+    for (const attribute of Object.values(geometry.attributes)) {
+      for (let i = 0; i < attribute.count; i += 3) {
+        for (let component = 0; component < attribute.itemSize; component++) {
+          const a = (i + 1) * attribute.itemSize + component;
+          const b = (i + 2) * attribute.itemSize + component;
+          const value = attribute.array[a];
+          attribute.array[a] = attribute.array[b];
+          attribute.array[b] = value;
+        }
+      }
+    }
+  }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   return geometry;
@@ -992,73 +1048,23 @@ function buildSnakeGeometry(group, config, baseColor, darkColor) {
   }
 
   const pieces = calculateLatticePieces(config.length + 1, config);
-  const {collisions} = snakePositions(config);
+  const collisions = detectCollisions(config.length + 1, config);
   const worldPieces = pieces.map(piece => piece.vertices.map(latticeVector));
   const allPoints = worldPieces.flat();
   const center = new THREE.Box3().setFromPoints(allPoints).getCenter(new THREE.Vector3());
-  // The spring bolt passes through the center of the shared leg face. It is
-  // short and perpendicular to that face; placing it along an edge makes it
-  // look like a loose rod underneath the snake.
-  const jointGeometry = new THREE.CylinderGeometry(0.105, 0.105, 0.28, 16);
-  const boltAxis = new THREE.Vector3(0, 1, 0);
-  const edgeMaterial = new THREE.LineBasicMaterial({color: 0x6b492c, transparent: true, opacity: 0.7});
-  const sharedFaces = worldPieces.slice(0, -1).map((first, index) => {
-    const second = worldPieces[index + 1];
-    const points = first.filter(point =>
-      second.some(other => point.distanceToSquared(other) < 1e-8)
-    );
-    if (points.length !== 4) return null;
-    return {
-      points,
-      firstIndices: points.map(point => first.findIndex(other => point.distanceToSquared(other) < 1e-8)),
-      secondIndices: points.map(point => second.findIndex(other => point.distanceToSquared(other) < 1e-8)),
-    };
-  });
 
   worldPieces.forEach((vertices, index) => {
     const localVertices = vertices.map(vertex => vertex.clone().sub(center));
-    const hiddenFaces = [];
-    if (sharedFaces[index - 1]) hiddenFaces.push(sharedFaces[index - 1].secondIndices);
-    if (sharedFaces[index]) hiddenFaces.push(sharedFaces[index].firstIndices);
-    const geometry = createLatticePrismGeometry(localVertices, hiddenFaces);
+    const geometry = createLatticePrismGeometry(localVertices);
     const material = new THREE.MeshStandardMaterial({
-      color: collisions.has(index) ? 0xc86a55 : (index % 2 === 0 ? baseColor : darkColor),
-      roughness: 0.48,
-      metalness: 0.08,
+      color: new THREE.Color(collisions.has(index) ? 0xc86a55 : (index % 2 === 0 ? baseColor : darkColor)).convertSRGBToLinear(),
+      roughness: 0.32,
+      metalness: 0,
       flatShading: true,
-      side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(geometry, material);
     group.add(mesh);
-    group.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 35), edgeMaterial));
-
-    if (index >= worldPieces.length - 1) return;
-    const sharedFace = sharedFaces[index];
-    if (!sharedFace) return;
-    const faceCenter = sharedFace.points.reduce((sum, point) => sum.add(point), new THREE.Vector3())
-      .multiplyScalar(0.25)
-      .sub(center);
-    const firstEdge = sharedFace.points[1].clone().sub(sharedFace.points[0]);
-    const secondEdge = sharedFace.points.slice(2)
-      .map(point => point.clone().sub(sharedFace.points[0]))
-      .find(edge => Math.abs(firstEdge.dot(edge)) < 1e-8);
-    if (!secondEdge) return;
-    const jointAxis = firstEdge.cross(secondEdge).normalize();
-    const joint = new THREE.Mesh(
-      jointGeometry,
-      new THREE.MeshStandardMaterial({color: 0x29283a, roughness: 0.62, metalness: 0.42})
-    );
-    joint.position.copy(faceCenter);
-    joint.quaternion.setFromUnitVectors(boltAxis, jointAxis);
-    group.add(joint);
-
-    const capGeometry = new THREE.CylinderGeometry(0.135, 0.135, 0.045, 16);
-    [-1, 1].forEach(side => {
-      const cap = new THREE.Mesh(capGeometry, joint.material.clone());
-      cap.position.copy(faceCenter).addScaledVector(jointAxis, side * 0.15);
-      cap.quaternion.copy(joint.quaternion);
-      group.add(cap);
-    });
+    // The spring bolts are inside the toy, not rods hanging below its faces.
   });
 }
 
@@ -1070,6 +1076,22 @@ let builderConfig = Array(NUM_JOINTS).fill(0);
 let builderScene, builderCamera, builderRenderer, builderGroup;
 let builderDrag = false, builderPrevMouse = {x:0,y:0};
 let builderRotX = 0.3, builderRotY = 0;
+let builderSpin = false;
+
+function fitBuilderCamera() {
+  if (!builderGroup || !builderCamera) return;
+  // Use the unrotated envelope and the narrower FOV so any viewing angle fits,
+  // including a narrow mobile viewport after a resize.
+  const bounds = new THREE.Box3();
+  builderGroup.children.forEach(child => bounds.union(child.geometry.boundingBox));
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
+  if (!Number.isFinite(radius) || radius === 0) return;
+  const vertical = THREE.MathUtils.degToRad(builderCamera.fov / 2);
+  const horizontal = Math.atan(Math.tan(vertical) * builderCamera.aspect);
+  const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
+  builderCamera.position.set(0, 0, distance);
+  builderCamera.lookAt(0, 0, 0);
+}
 
 (function initBuilder() {
   const canvas = document.getElementById('builder-canvas');
@@ -1081,30 +1103,27 @@ let builderRotX = 0.3, builderRotY = 0;
     return;
   }
   builderRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  builderRenderer.outputEncoding = THREE.sRGBEncoding;
   builderRenderer.setClearColor(0x222240);
 
   builderScene = new THREE.Scene();
   builderCamera = new THREE.PerspectiveCamera(35, 4/3, 0.1, 100);
   builderCamera.position.set(0, 0, 18);
 
-  builderScene.add(new THREE.AmbientLight(0xede8d8, 0.5));
-  const d1 = new THREE.DirectionalLight(0xc8883a, 0.7);
-  d1.position.set(5, 8, 4);
-  const d2 = new THREE.DirectionalLight(0x6a7ec8, 0.3);
-  d2.position.set(-4, 2, -3);
-  builderScene.add(d1, d2);
+  addSnakeLighting(builderScene);
 
   builderGroup = new THREE.Group();
   builderScene.add(builderGroup);
 
   function resize() {
     const rect = canvas.getBoundingClientRect();
-    builderRenderer.setSize(rect.width, rect.height);
+    builderRenderer.setSize(rect.width, rect.height, false);
     builderCamera.aspect = rect.width / rect.height;
     builderCamera.updateProjectionMatrix();
+    fitBuilderCamera();
   }
   resize();
-  window.addEventListener('resize', resize);
+  new ResizeObserver(resize).observe(canvas);
 
   // Drag to rotate
   canvas.addEventListener('pointerdown', e => {
@@ -1121,56 +1140,74 @@ let builderRotX = 0.3, builderRotY = 0;
     builderPrevMouse = { x: e.clientX, y: e.clientY };
   });
   canvas.addEventListener('pointerup', () => { builderDrag = false; });
+  canvas.addEventListener('pointercancel', () => { builderDrag = false; });
+  canvas.addEventListener('lostpointercapture', () => { builderDrag = false; });
+  canvas.addEventListener('keydown', e => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    builderRotY += e.key === 'ArrowLeft' ? -0.15 : e.key === 'ArrowRight' ? 0.15 : 0;
+    builderRotX += e.key === 'ArrowUp' ? -0.15 : e.key === 'ArrowDown' ? 0.15 : 0;
+  });
+  document.getElementById('spin-view').addEventListener('click', e => {
+    builderSpin = !builderSpin;
+    e.currentTarget.setAttribute('aria-pressed', String(builderSpin));
+    e.currentTarget.textContent = builderSpin ? 'Pause view' : 'Spin view';
+  });
+  // Register once. Rebuilding controls inside this handler used to multiply
+  // listeners after every click, eventually freezing the browser.
+  document.getElementById('joint-controls').addEventListener('click', e => {
+    const btn = e.target.closest('.rot-btn');
+    if (!btn) return;
+    builderConfig[Number(btn.dataset.joint)] = Number(btn.dataset.rot);
+    syncJointControls();
+    updateBuilder();
+  });
 
   buildJointControls();
   updateBuilder();
 
-  (function animate() {
+  let previousFrame;
+  function animate(now) {
     requestAnimationFrame(animate);
-    if (!builderDrag) builderRotY += 0.003;
+    const dt = previousFrame === undefined ? 0 : Math.min((now - previousFrame) / 1000, 0.05);
+    previousFrame = now;
+    if (builderSpin && !builderDrag) builderRotY += dt * 0.3;
     builderGroup.rotation.x = builderRotX;
     builderGroup.rotation.y = builderRotY;
     builderRenderer.render(builderScene, builderCamera);
-  })();
+  }
+  requestAnimationFrame(animate);
 })();
 
 function buildJointControls() {
   const wrap = document.getElementById('joint-controls');
   wrap.innerHTML = '';
-  // Show first 10 joints with individual controls, rest collapsed
-  const show = Math.min(NUM_JOINTS, 10);
-  for (let i = 0; i < show; i++) {
+  for (let i = 0; i < NUM_JOINTS; i++) {
     const row = document.createElement('div');
     row.className = 'control-row';
     row.innerHTML = `
-      <label>J${i+1}</label>
-      <div class="rot-buttons">
-        ${[0,1,2,3].map(r => `<button class="rot-btn ${builderConfig[i]===r?'active':''}" data-joint="${i}" data-rot="${r}">${['0°','90°','180°','270°'][r]}</button>`).join('')}
+      <label id="joint-label-${i}">J${i+1}</label>
+      <div class="rot-buttons" role="group" aria-labelledby="joint-label-${i}">
+        ${[0,1,2,3].map(r => `<button type="button" class="rot-btn" aria-label="Joint ${i+1}: ${r*90} degrees" data-joint="${i}" data-rot="${r}">${r*90}°</button>`).join('')}
       </div>
     `;
     wrap.appendChild(row);
   }
-  wrap.addEventListener('click', e => {
-    const btn = e.target.closest('.rot-btn');
-    if (!btn) return;
-    const j = parseInt(btn.dataset.joint);
-    const r = parseInt(btn.dataset.rot);
-    builderConfig[j] = r;
-    buildJointControls();
-    updateBuilder();
+  syncJointControls();
+}
+
+function syncJointControls() {
+  document.querySelectorAll('#joint-controls .rot-btn').forEach(btn => {
+    const selected = builderConfig[Number(btn.dataset.joint)] === Number(btn.dataset.rot);
+    btn.classList.toggle('active', selected);
+    btn.setAttribute('aria-pressed', String(selected));
   });
 }
 
 function updateBuilder() {
+  if (!builderRenderer) return;
   buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0xede8d8);
-  builderRotX = 0.3;
-  builderGroup.rotation.set(builderRotX, 0, 0);
-
-  const bounds = new THREE.Box3().setFromObject(builderGroup);
-  const sphere = bounds.getBoundingSphere(new THREE.Sphere());
-  const fitDistance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(builderCamera.fov / 2));
-  builderCamera.position.copy(sphere.center).add(new THREE.Vector3(0, sphere.radius * 0.08, fitDistance * 1.12));
-  builderCamera.lookAt(sphere.center);
+  fitBuilderCamera();
 
   const { positions, collisions } = snakePositions(builderConfig);
   const isValid = collisions.size === 0;
@@ -1187,25 +1224,29 @@ function updateBuilder() {
 
   const display = document.getElementById('config-display');
   display.innerHTML = builderConfig.map((r, i) =>
-    `<span class="rot-char" style="${i<10?'background:var(--surf-edge)':''}">${['0','1','2','3'][r]}</span>`
+    `<span class="rot-char" title="Joint ${i+1}: ${r*90}°">${r}</span>`
   ).join('');
 }
 
 function randomizeSnake() {
   builderConfig = Array.from({length: NUM_JOINTS}, () => Math.floor(Math.random()*4));
-  buildJointControls();
+  syncJointControls();
   updateBuilder();
 }
 
 function resetSnake() {
   builderConfig = Array(NUM_JOINTS).fill(0);
-  buildJointControls();
+  builderRotX = 0.3;
+  builderRotY = 0;
+  syncJointControls();
   updateBuilder();
 }
 
 function ballSnake() {
   builderConfig = BALL_CONFIG.slice();
-  buildJointControls();
+  builderRotX = -0.35;
+  builderRotY = 0.5;
+  syncJointControls();
   updateBuilder();
 }
 
