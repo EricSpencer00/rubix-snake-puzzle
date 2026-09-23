@@ -31,6 +31,60 @@ test('the shipped page script parses and uses the bundled renderer', () => {
   assert.ok(THREE.ExtrudeGeometry);
 });
 
+test('the complete page starts both renderers in browser script order', () => {
+  const elements = new Map();
+  const frames = [];
+  const scenes = [];
+  const element = () => ({
+    children: [], innerHTML: '', style: {}, classList: {toggle() {}},
+    parentElement: {clientWidth: 1280, clientHeight: 720},
+    appendChild(child) { this.children.push(child); },
+    addEventListener() {}, setAttribute() {},
+    getBoundingClientRect() { return {width: 560, height: 420}; },
+  });
+  const document = {
+    getElementById(id) {
+      if (!elements.has(id)) elements.set(id, element());
+      return elements.get(id);
+    },
+    createElement: element,
+    querySelectorAll(selector) {
+      if (selector !== '#joint-controls .rot-btn') return [];
+      return elements.get('joint-controls').children.flatMap(row =>
+        [...row.innerHTML.matchAll(/data-joint="(\d+)" data-rot="(\d+)"/g)].map(match => ({
+          ...element(), dataset: {joint: match[1], rot: match[2]},
+        })));
+    },
+  };
+  const sandbox = vm.createContext({
+    THREE: {...THREE, WebGLRenderer: class {
+      setPixelRatio() {} setSize() {} setClearColor() {}
+      render(scene) { scenes.push(scene); }
+    }},
+    document,
+    window: {devicePixelRatio: 1, addEventListener() {}, matchMedia() { return {matches: false}; }},
+    ResizeObserver: class {observe() {}},
+    IntersectionObserver: class {observe() {}},
+    requestAnimationFrame(callback) { frames.push(callback); },
+  });
+  // Execute the actual page, including startup calls, rather than just loading
+  // selected functions. This catches the live site's pre-initialization crash.
+  vm.runInContext(script, sandbox);
+  assert.equal(frames.length, 2);
+  frames.splice(0).forEach(frame => frame(0));
+  assert.equal(scenes.length, 2);
+  assert.ok(scenes.every(scene => scene.children.some(child => child.isGroup && child.children.length === 24)));
+  assert.equal(document.querySelectorAll('#joint-controls .rot-btn').length, 92);
+  assert.match(elements.get('builder-status').innerHTML, /All 24 prisms are clear/);
+});
+
+test('the page separates published full-size totals from its local model checks', () => {
+  assert.match(html, /Peter Aylett's corrected exhaustive search, not a proof in this repository/);
+  assert.match(html, /Python cell-search counts for 2–14 wedges/);
+  assert.match(html, /builder uses a separate half-cube prism overlap check/);
+  assert.doesNotMatch(html, /First formal verification|Coq \+ Python|Verified counts/);
+});
+
 test('every quarter-turn joins full square faces, not points or edges', () => {
   for (const config of configurations) {
     const pieces = calculateLatticePieces(24, config);
@@ -154,11 +208,13 @@ test('repeated joint clicks keep one handler, all 23 controls, and keyboard focu
   const elements = new Map();
   function element() {
     return {
-      children: [], buttons: [], handlers: {}, classList: {toggle() {}},
+      children: [], buttons: [], handlers: {}, checked: false, textContent: '', classList: {toggle() {}},
       setAttribute() {}, appendChild(child) { this.children.push(child); },
       addEventListener(event, callback) { (this.handlers[event] ??= []).push(callback); },
       getBoundingClientRect() { return {width: 560, height: 420}; },
+      get innerHTML() { return this._innerHTML; },
       set innerHTML(value) {
+        this._innerHTML = value;
         this.children = [];
         this.buttons = [...value.matchAll(/data-joint="(\d+)" data-rot="(\d+)"/g)].map(match => ({
           dataset: {joint: match[1], rot: match[2]},
@@ -193,8 +249,33 @@ test('repeated joint clicks keep one handler, all 23 controls, and keyboard focu
     assert.equal(vm.runInContext('builderGroup.children.length', sandbox), 24);
   }
   controls.handlers.click[0]({target: {closest: () => lastButton}});
-  assert.equal(vm.runInContext('builderConfig[22]', sandbox), 3);
+  const lastTurn = String(vm.runInContext('builderConfig[22]', sandbox));
+  assert.ok(document.querySelectorAll().some(button => button.dataset.joint === '22' && button.dataset.rot === lastTurn));
+  assert.equal(vm.runInContext('detectCollisions(24, builderConfig).size', sandbox), 0);
   assert.equal(document.querySelectorAll().at(-1), lastButton, 'controls remain mounted');
+
+  const collisionSwitch = document.getElementById('prevent-collisions');
+  assert.equal(collisionSwitch.checked, true, 'overlap prevention starts on');
+  vm.runInContext('ballSnake()', sandbox);
+  const ballConfig = Array.from(vm.runInContext('builderConfig', sandbox));
+  const collidingTurn = document.querySelectorAll().find(button => button.dataset.joint === '0' && button.dataset.rot === '0');
+  controls.handlers.click[0]({target: {closest: () => collidingTurn}});
+  assert.deepEqual(Array.from(vm.runInContext('builderConfig', sandbox)), ballConfig, 'a colliding turn is not applied');
+  assert.match(document.getElementById('builder-status').innerHTML, /Turn skipped/);
+
+  for (let i = 0; i < 5; i++) {
+    vm.runInContext('randomizeSnake()', sandbox);
+    assert.equal(vm.runInContext('detectCollisions(24, builderConfig).size', sandbox), 0, 'random valid shapes stay clear');
+  }
+
+  collisionSwitch.checked = false;
+  collisionSwitch.handlers.change[0]({currentTarget: collisionSwitch});
+  vm.runInContext('builderConfig = Array(23).fill(2); updateBuilder()', sandbox);
+  assert.ok(vm.runInContext('detectCollisions(24, builderConfig).size', sandbox) > 0, 'turning the switch off allows overlap');
+  collisionSwitch.checked = true;
+  collisionSwitch.handlers.change[0]({currentTarget: collisionSwitch});
+  assert.equal(vm.runInContext('detectCollisions(24, builderConfig).size', sandbox), 0, 'turning it on repairs an overlapping shape');
+  assert.match(document.getElementById('builder-status').innerHTML, /adjusted to clear/);
 });
 
 test('hero animation moves but never sweeps through the title or out of frame', () => {

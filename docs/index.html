@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rubik's Snake — Formal State Space Verification</title>
-<meta name="description" content="Interactive explorer for the first Coq/TLA+ formalization of Rubik's Snake configurations. 13.4 trillion valid positions.">
+<title>Rubik's Snake — State Space Explorer</title>
+<meta name="description" content="Explore the geometry of a 24-piece Rubik's Snake, its 23 joints, and the published count of non-overlapping configurations.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anybody:wght@400;700;900&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -38,6 +38,7 @@ html {
 }
 
 body { overflow-x: hidden; }
+a { color: var(--amber); text-underline-offset: 0.2em; }
 
 /* ── LAYOUT ── */
 
@@ -97,7 +98,7 @@ body { overflow-x: hidden; }
 }
 
 .hero-text p {
-  font-size: 0.85rem;
+  font-size: 0.9375rem;
   color: var(--text-dim);
   line-height: 1.8;
   max-width: 48ch;
@@ -134,6 +135,9 @@ section {
 section + section { padding-top: 2rem; }
 
 h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
   font-family: 'Anybody', sans-serif;
   font-weight: 700;
   font-size: clamp(1.6rem, 3.2vw, 2.6rem);
@@ -143,16 +147,15 @@ h2 {
 }
 
 h2 .num {
+  flex-shrink: 0;
   color: var(--amber);
-  font-size: 0.6em;
-  vertical-align: super;
-  margin-right: 0.3ch;
+  font-size: 0.5em;
 }
 
 .prose {
   max-width: 62ch;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 0.9375rem;
   line-height: 1.85;
   margin-bottom: 2.4rem;
 }
@@ -220,6 +223,17 @@ h2 .num {
   z-index: 10;
 }
 
+.bar-group:nth-child(-n+4) .bar-tooltip {
+  left: 0;
+  transform: translateY(-12px);
+}
+
+.bar-group:nth-last-child(-n+4) .bar-tooltip {
+  left: auto;
+  right: 0;
+  transform: translateY(-12px);
+}
+
 .bar-group:hover .bar-tooltip { opacity: 1; }
 
 .chart-legend {
@@ -243,7 +257,7 @@ h2 .num {
 
 .big-numbers {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   background: var(--surf-edge);
   border: 1px solid var(--surf-edge);
@@ -253,6 +267,7 @@ h2 .num {
 }
 
 .big-num-cell {
+  min-width: 0;
   background: var(--surf);
   padding: 1.8rem 1.6rem;
 }
@@ -260,13 +275,14 @@ h2 .num {
 .big-num-cell .value {
   font-family: 'Anybody', sans-serif;
   font-weight: 900;
-  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  font-size: clamp(1.25rem, 2.8vw, 1.9rem);
+  font-variant-numeric: tabular-nums;
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
 
 .big-num-cell .label {
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
   color: var(--text-dim);
   margin-top: 0.4rem;
   letter-spacing: 0.04em;
@@ -332,6 +348,7 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); out
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  padding-block: 0.2rem;
 }
 
 .control-row label {
@@ -342,10 +359,76 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); out
   letter-spacing: 0.08em;
 }
 
+.collision-setting {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.15rem 0.7rem;
+  padding: 0.7rem 0;
+}
+
+.collision-setting input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.switch-track {
+  grid-row: span 2;
+  width: 2.5rem;
+  height: 1.4rem;
+  padding: 0.15rem;
+  border: 1px solid var(--surf-edge);
+  border-radius: 99px;
+  background: var(--surf-raise);
+  transition: background 180ms var(--ease-expo), border-color 180ms var(--ease-expo);
+}
+
+.switch-track::after {
+  content: "";
+  display: block;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 180ms var(--ease-expo), background 180ms var(--ease-expo);
+}
+
+.collision-setting input:checked + .switch-track {
+  border-color: var(--green);
+  background: #5db87a33;
+}
+
+.collision-setting input:checked + .switch-track::after {
+  transform: translateX(1.05rem);
+  background: var(--green);
+}
+
+.collision-setting input:focus-visible + .switch-track {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
+.collision-setting strong {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.collision-setting small {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
 .rot-buttons {
   display: flex;
+  flex: 1;
   gap: 4px;
 }
+
+.rot-buttons .rot-btn { flex: 1; min-width: 0; padding-inline: 0.35rem; }
 
 .rot-btn {
   background: var(--surf-raise);
@@ -406,6 +489,8 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); out
   gap: 0.5rem;
 }
 
+.builder-status svg { flex-shrink: 0; }
+
 .status-valid {
   background: #5db87a18;
   border: 1px solid #5db87a44;
@@ -419,9 +504,12 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); out
 }
 
 .btn-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
 }
+
+.btn-row .btn-primary { grid-column: 1 / -1; }
 
 .btn {
   flex: 1;
@@ -429,8 +517,9 @@ button:focus-visible, canvas:focus-visible { outline: 2px solid var(--blue); out
   border: 1px solid var(--surf-edge);
   color: var(--text);
   font-family: 'Geist Mono', monospace;
-  font-size: 0.72rem;
-  padding: 0.5rem 0.8rem;
+  font-size: 0.8125rem;
+  min-height: 44px;
+  padding: 0.6rem 0.8rem;
   border-radius: 4px;
   cursor: pointer;
   transition: all 200ms ease;
@@ -534,7 +623,7 @@ tr.highlight td {
 }
 
 .proof-card p {
-  font-size: 0.72rem;
+  font-size: 0.875rem;
   color: var(--text-dim);
   line-height: 1.7;
 }
@@ -559,6 +648,18 @@ footer a {
 }
 
 footer a:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  section { padding-inline: 1.25rem; }
+  .big-numbers { grid-template-columns: 1fr; }
+  .big-num-cell { padding: 1.4rem; }
+  .big-num-cell .value { font-size: clamp(1.25rem, 5vw, 1.9rem); }
+  .proof-grid { grid-template-columns: 1fr; }
+  .rot-btn { min-height: 44px; font-size: 0.875rem; }
+  .control-row label { min-width: 3ch; font-size: 0.8125rem; }
+  .chart-legend { flex-wrap: wrap; }
+  footer { gap: 1rem; flex-wrap: wrap; padding-inline: 1.25rem; }
+}
 
 /* ── ANIMATIONS ── */
 
@@ -589,7 +690,7 @@ footer a:hover { text-decoration: underline; }
   <canvas id="snake-canvas"></canvas>
   <div class="hero-text fade-up">
     <h1>Rubik's <span>Snake</span></h1>
-    <p>First formal verification of the puzzle's state space. 24 triangular prisms, 23 joints, 4 rotations each. 70 trillion possible configurations. How many actually work?</p>
+    <p>24 right-triangular prisms. 23 joints, each with four quarter-turn positions: 4<sup>23</sup> possible turn sequences. Explore how the pieces fit, and where they overlap.</p>
   </div>
   <div class="scroll-cue fade-up fade-up-d2">
     <span>scroll</span>
@@ -602,56 +703,63 @@ footer a:hover { text-decoration: underline; }
   <div class="big-numbers">
     <div class="big-num-cell">
       <div class="value">70,368,744,177,664</div>
-      <div class="label">Total configurations (4<sup>23</sup>)</div>
+      <div class="label">Possible turn sequences (4<sup>23</sup>)</div>
     </div>
     <div class="big-num-cell">
       <div class="value value-green">13,446,591,920,995</div>
-      <div class="label">Valid (no self-intersection)</div>
+      <div class="label">Non-overlapping, in Aylett's search</div>
     </div>
     <div class="big-num-cell">
       <div class="value value-red">80.9%</div>
-      <div class="label">Geometrically impossible</div>
+      <div class="label">Rejected by that search</div>
     </div>
     <div class="big-num-cell">
       <div class="value value-gold">63,970,851</div>
-      <div class="label">Closed loops</div>
+      <div class="label">Closed-loop sequences, Aylett</div>
     </div>
   </div>
+  <p class="prose">The 24-piece counts come from Peter Aylett's corrected exhaustive search, not a proof in this repository. <a href="https://blog.ylett.com/2011/09/rubiks-snake-combinations.html" target="_blank" rel="noopener noreferrer">Read the search and its 2022 correction.</a></p>
 </section>
 
 <!-- ════ CHART ════ -->
 <section class="chart-section">
-  <h2><span class="num">01</span>Collision onset</h2>
-  <p class="prose">With fewer than 9 wedges, the snake can't fold back on itself: every configuration is valid. At 9 wedges, the first collisions appear (1.56% invalid). The invalid fraction climbs steadily, reaching 80.9% at the full 24-wedge puzzle. Only 19.1% of the complete state space remains valid.</p>
+  <h2><span class="num">01</span>Search counts</h2>
+  <p class="prose">This chart shows only the repository's Python cell-search counts for 2–14 wedges. The table below separately lists Aylett's full-size search. Coq does not prove these counts, and the builder uses a separate half-cube prism overlap check.</p>
 
   <div class="bar-chart" id="barChart"></div>
   <div class="chart-legend">
-    <span><span class="legend-dot" style="background:var(--green)"></span>Valid</span>
-    <span><span class="legend-dot" style="background:var(--red)"></span>Invalid (collision)</span>
+    <span><span class="legend-dot" style="background:var(--green)"></span>Counted as clear</span>
+    <span><span class="legend-dot" style="background:var(--red)"></span>Counted as a collision</span>
   </div>
 </section>
 
 <!-- ════ INTERACTIVE BUILDER ════ -->
 <section class="builder-section">
   <h2><span class="num">02</span>Build a snake</h2>
-  <p class="prose">Choose a rotation at each joint. The 3D model updates in real time. Red highlights mark collisions. Click randomize to explore the space.</p>
+  <p class="prose">Choose a quarter-turn position for each joint. With Prevent overlaps on, colliding turns are skipped; Random valid only makes clear shapes.</p>
 
   <div class="builder-wrap">
     <div class="builder-preview">
       <canvas id="builder-canvas" tabindex="0" role="img" aria-label="24 connected triangular prisms. Drag or use arrow keys to rotate the view."></canvas>
-      <div class="view-controls"><span>Drag or use arrow keys to rotate</span><button class="rot-btn" id="spin-view" type="button" aria-pressed="false">Spin view</button></div>
+      <div class="view-controls"><span>Drag or use arrow keys to turn the view</span><button class="rot-btn" id="spin-view" type="button" aria-pressed="false">Spin view</button></div>
     </div>
     <div class="builder-controls">
+      <label class="collision-setting" for="prevent-collisions">
+        <input type="checkbox" id="prevent-collisions" role="switch" aria-describedby="collision-help" checked>
+        <span class="switch-track" aria-hidden="true"></span>
+        <strong>Prevent overlaps</strong>
+        <small id="collision-help">On: overlapping turns are skipped. Turn off to explore them.</small>
+      </label>
       <div id="joint-controls"></div>
       <div class="config-display" id="config-display"></div>
       <div class="builder-status status-valid" id="builder-status" role="status" aria-live="polite">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg>
-        <span>Valid configuration</span>
+        <span>All 24 prisms are clear.</span>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="randomizeSnake()">Randomize</button>
-        <button class="btn" onclick="resetSnake()">Reset</button>
-        <button class="btn" onclick="ballSnake()">Ball</button>
+        <button class="btn btn-primary" id="randomize-snake" onclick="randomizeSnake()">Random valid</button>
+        <button class="btn" onclick="resetSnake()">Straighten</button>
+        <button class="btn" onclick="ballSnake()">Ball shape</button>
       </div>
     </div>
   </div>
@@ -659,8 +767,8 @@ footer a:hover { text-decoration: underline; }
 
 <!-- ════ DATA TABLE ════ -->
 <section>
-  <h2><span class="num">03</span>Verified counts</h2>
-  <p class="prose">Each row is machine-checked: the Python enumerator's output matches the Coq proofs for small N. Aylett's corrected 2022 result provides the n=24 ground truth.</p>
+  <h2><span class="num">03</span>Counts by search</h2>
+  <p class="prose">The smaller rows are Python cell-revisit counts from this repository. The 24-wedge figure is from Aylett's exhaustive search. These are search results, not a Coq proof of the full count.</p>
 
   <div class="data-table-wrap">
     <table>
@@ -668,9 +776,9 @@ footer a:hover { text-decoration: underline; }
         <tr>
           <th>Wedges</th>
           <th>Joints</th>
-          <th>Unconstrained</th>
-          <th>Valid</th>
-          <th>Invalid %</th>
+          <th>All turn sequences</th>
+          <th>Counted clear</th>
+          <th>Counted collision %</th>
           <th>Source</th>
         </tr>
       </thead>
@@ -681,31 +789,31 @@ footer a:hover { text-decoration: underline; }
 
 <!-- ════ FORMAL PROOFS ════ -->
 <section>
-  <h2><span class="num">04</span>Formal proofs</h2>
-  <p class="prose">This is the first formal verification of the Rubik's Snake in any proof assistant. Three complementary approaches cover different verification depths.</p>
+  <h2><span class="num">04</span>What the formal models cover</h2>
+  <p class="prose">This repository explores a formal description of the puzzle. It does not prove Aylett's 24-piece count; the models and their current limits are listed here.</p>
 
   <div class="proof-grid">
     <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/coq" target="_blank">
       <div class="tag">Coq / Rocq</div>
-      <h3>State space formalization</h3>
-      <p>Wedge geometry, rotation semantics, collision predicate, symmetry proofs. Machine-checked test vectors for n=2..14.</p>
+      <h3>Integer-grid model</h3>
+      <p>Defines rotations and a repeated-cell check. Two claims remain unproved; this does not establish the full count.</p>
     </a>
     <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/tla" target="_blank">
       <div class="tag">TLA+</div>
-      <h3>Model checking</h3>
-      <p>Incremental state machine spec. Invariant: no cell occupied twice. Configurable N for TLC exhaustive checking.</p>
+      <h3>Small-state specification</h3>
+      <p>A draft for checking shorter chains. This page does not report a completed model-checking run or a 24-piece proof.</p>
     </a>
     <a class="proof-card" href="https://github.com/EricSpencer00/rubix-snake-puzzle/tree/main/python" target="_blank">
       <div class="tag">Python</div>
-      <h3>Reference enumerator</h3>
-      <p>Backtracking search with collision pruning. Validated test vectors cross-check the Coq proofs.</p>
+      <h3>Python search</h3>
+      <p>Enumerates paths, treating any repeated lattice cell as a collision. This is a different check from the builder's prism-overlap test.</p>
     </a>
   </div>
 </section>
 
 <!-- ════ FOOTER ════ -->
 <footer>
-  <span>Rubik's Snake Formal Verification &middot; 2026</span>
+  <span>Rubik's Snake State Space Explorer &middot; 2026</span>
   <a href="https://github.com/EricSpencer00/rubix-snake-puzzle">GitHub</a>
 </footer>
 
@@ -735,9 +843,10 @@ function fmt(n) {
 // ─── BAR CHART ───
 (function buildChart() {
   const el = document.getElementById('barChart');
-  const maxLog = Math.log10(DATA[DATA.length-1].unc);
+  const chartData = DATA.filter(d => d.n <= 14);
+  const maxLog = Math.log10(chartData[chartData.length - 1].unc);
 
-  DATA.forEach(d => {
+  chartData.forEach(d => {
     const inv = d.unc - d.valid;
     const invPct = ((inv / d.unc) * 100).toFixed(2);
     const totalH = (Math.log10(d.unc) / maxLog) * 90 + 5;
@@ -749,9 +858,9 @@ function fmt(n) {
     group.innerHTML = `
       <div class="bar-tooltip">
         <strong>n = ${d.n}</strong><br>
-        Valid: ${fmt(d.valid)}<br>
-        Invalid: ${fmt(inv)}<br>
-        ${invPct}% collision
+        Counted clear: ${fmt(d.valid)}<br>
+        Counted collision: ${fmt(inv)}<br>
+        ${invPct}% of this search
       </div>
       <div class="bar bar-invalid" style="height:${invH}%"></div>
       <div class="bar bar-valid" style="height:${validH}%"></div>
@@ -766,7 +875,9 @@ function fmt(n) {
   const tbody = document.getElementById('data-table-body');
   DATA.forEach(d => {
     const inv = ((1 - d.valid / d.unc) * 100).toFixed(2);
-    const src = d.n <= 14 ? 'Coq + Python' : 'Aylett 2022';
+    const src = d.n <= 14
+      ? 'Repository Python cell search'
+      : '<a href="https://blog.ylett.com/2011/09/rubiks-snake-combinations.html" target="_blank" rel="noopener noreferrer">Aylett, corrected 2022</a>';
     const cls = d.n === 24 ? ' class="highlight"' : '';
     tbody.innerHTML += `<tr${cls}>
       <td class="mono">${d.n}</td>
@@ -1077,6 +1188,8 @@ let builderScene, builderCamera, builderRenderer, builderGroup;
 let builderDrag = false, builderPrevMouse = {x:0,y:0};
 let builderRotX = 0.3, builderRotY = 0;
 let builderSpin = false;
+let preventCollisions = true;
+let builderNotice = '';
 
 function fitBuilderCamera() {
   if (!builderGroup || !builderCamera) return;
@@ -1153,17 +1266,39 @@ function fitBuilderCamera() {
     e.currentTarget.setAttribute('aria-pressed', String(builderSpin));
     e.currentTarget.textContent = builderSpin ? 'Pause view' : 'Spin view';
   });
+  document.getElementById('prevent-collisions').addEventListener('change', e => {
+    preventCollisions = e.currentTarget.checked;
+    builderNotice = '';
+    if (preventCollisions && detectCollisions(NUM_JOINTS + 1, builderConfig).size > 0) {
+      builderConfig = collisionFreeConfig(builderConfig);
+      builderNotice = 'Overlaps found. The turns were adjusted to clear them.';
+      syncJointControls();
+    }
+    syncCollisionControls();
+    updateBuilder();
+  });
   // Register once. Rebuilding controls inside this handler used to multiply
   // listeners after every click, eventually freezing the browser.
   document.getElementById('joint-controls').addEventListener('click', e => {
     const btn = e.target.closest('.rot-btn');
     if (!btn) return;
-    builderConfig[Number(btn.dataset.joint)] = Number(btn.dataset.rot);
+    const joint = Number(btn.dataset.joint);
+    const turn = Number(btn.dataset.rot);
+    const nextConfig = builderConfig.slice();
+    nextConfig[joint] = turn;
+    if (preventCollisions && detectCollisions(NUM_JOINTS + 1, nextConfig).size > 0) {
+      builderNotice = `Turn skipped. Joint ${joint + 1} would make two prisms overlap.`;
+      updateBuilder();
+      return;
+    }
+    builderConfig = nextConfig;
+    builderNotice = '';
     syncJointControls();
     updateBuilder();
   });
 
   buildJointControls();
+  syncCollisionControls();
   updateBuilder();
 
   let previousFrame;
@@ -1204,6 +1339,37 @@ function syncJointControls() {
   });
 }
 
+function syncCollisionControls() {
+  document.getElementById('prevent-collisions').checked = preventCollisions;
+  document.getElementById('randomize-snake').textContent = preventCollisions
+    ? 'Random valid'
+    : 'Random shape';
+}
+
+function collisionFreeConfig(preferredConfig) {
+  const config = Array(NUM_JOINTS).fill(0);
+
+  function placeJoint(joint) {
+    if (joint === NUM_JOINTS) return true;
+    const preferred = Number.isInteger(preferredConfig?.[joint])
+      ? preferredConfig[joint]
+      : Math.floor(Math.random() * 4);
+    const alternatives = [0, 1, 2, 3].filter(turn => turn !== preferred);
+    for (let i = alternatives.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [alternatives[i], alternatives[j]] = [alternatives[j], alternatives[i]];
+    }
+    for (const turn of [preferred, ...alternatives]) {
+      config[joint] = turn;
+      if (detectCollisions(joint + 2, config.slice(0, joint + 1)).size === 0
+          && placeJoint(joint + 1)) return true;
+    }
+    return false;
+  }
+
+  return placeJoint(0) ? config : Array(NUM_JOINTS).fill(0);
+}
+
 function updateBuilder() {
   if (!builderRenderer) return;
   buildSnakeGeometry(builderGroup, builderConfig, 0xc8883a, 0xede8d8);
@@ -1215,11 +1381,12 @@ function updateBuilder() {
   const statusEl = document.getElementById('builder-status');
   if (isValid) {
     statusEl.className = 'builder-status status-valid';
-    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>Valid: ${positions.length} prisms, no collisions</span>`;
+    const message = builderNotice || `All ${positions.length} prisms are clear.`;
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l3 3 5-5"/></svg><span>${message}</span>`;
   } else {
     statusEl.className = 'builder-status status-invalid';
     const collisionLabels = [...collisions].map(index => index + 1).join(', ');
-    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Collision at prism${collisions.size>1?'s':''} ${collisionLabels}</span>`;
+    statusEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l6 6M10 4l-6 6"/></svg><span>Overlap at prism${collisions.size>1?'s':''} ${collisionLabels}.</span>`;
   }
 
   const display = document.getElementById('config-display');
@@ -1229,13 +1396,17 @@ function updateBuilder() {
 }
 
 function randomizeSnake() {
-  builderConfig = Array.from({length: NUM_JOINTS}, () => Math.floor(Math.random()*4));
+  builderConfig = preventCollisions
+    ? collisionFreeConfig()
+    : Array.from({length: NUM_JOINTS}, () => Math.floor(Math.random()*4));
+  builderNotice = '';
   syncJointControls();
   updateBuilder();
 }
 
 function resetSnake() {
   builderConfig = Array(NUM_JOINTS).fill(0);
+  builderNotice = '';
   builderRotX = 0.3;
   builderRotY = 0;
   syncJointControls();
@@ -1244,6 +1415,7 @@ function resetSnake() {
 
 function ballSnake() {
   builderConfig = BALL_CONFIG.slice();
+  builderNotice = '';
   builderRotX = -0.35;
   builderRotY = 0.5;
   syncJointControls();

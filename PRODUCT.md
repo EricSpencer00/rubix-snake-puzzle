@@ -1,11 +1,11 @@
-# Rubik's Snake Puzzle — Formal Verification Visualizer
+# Rubik's Snake — State Space Explorer
 
 ## Product Purpose
-Interactive visualization of Rubik's Snake state space enumeration results. Lets visitors explore the puzzle geometry, see how configurations are counted, and understand why ~80.9% of states are invalid due to self-intersection.
+Interactive 3D model of the 24-piece Rubik's Snake, paired with small formal-methods experiments and clearly sourced state-space counts. The builder checks overlap between triangular-prism halves. The Python reference search uses repeated lattice-cell occupancy, and its results are not treated as a proof of the full published count.
 
 ## Users
 - Puzzle enthusiasts and recreational mathematicians
-- Formal methods researchers curious about the first Coq/TLA+ formalization
+- Formal methods researchers curious about the Coq and TLA+ models
 - GitHub visitors browsing the repo
 
 ## Register
@@ -23,6 +23,6 @@ brand
 - The usual dark-blue "data science" look
 
 ## Strategic Principles
-- Show the combinatorial explosion visually — numbers alone don't convey 70 trillion states
+- Show the combinatorial explosion visually, while distinguishing published search results from what this repository proves
 - The 3D snake model is the hero, not charts
-- Every data point links back to the formal proofs
+- Attribute external counts to their source; do not imply they are proved by the repository

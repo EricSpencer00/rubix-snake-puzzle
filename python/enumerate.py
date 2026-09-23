@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Reference enumerator for Rubik's Snake valid configurations.
+Reference enumerator for Rubik's Snake turn sequences.
 
-Uses backtracking with collision pruning to count all non-self-intersecting
-configurations. Results for small N cross-validate the Coq proofs and TLA+ model.
+Uses backtracking and repeated lattice-cell occupancy as its collision rule.
+This is separate from the browser's half-cube prism overlap test, and does not
+prove the published full-size result.
 
 Usage:
     python3 enumerate.py --wedges 8
-    python3 enumerate.py --wedges 24 --parallel  # full puzzle, needs hours
+    python3 enumerate.py --wedges 10  # the search grows exponentially
 """
 
 import argparse

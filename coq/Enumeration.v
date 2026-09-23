@@ -5,7 +5,7 @@ Require Import List ZArith Bool.
 Import ListNotations.
 Open Scope Z_scope.
 
-(* === Test vectors for cross-validation === *)
+(* === Small checked examples === *)
 
 (* 1 wedge (0 joints): always valid, exactly 1 config *)
 Lemma one_wedge_count : count_valid 0 = 1.
@@ -19,8 +19,8 @@ Proof. reflexivity. Qed.
 Lemma three_wedge_count : count_valid 2 = 16.
 Proof. reflexivity. Qed.
 
-(* These machine-checked equalities serve as ground truth for the
-   TLA+ model checker and Python reference implementation. *)
+(* These tiny examples are checked in Coq. They do not establish the
+   larger Python counts or the published 24-piece result. *)
 
 (* === Key structural lemma === *)
 

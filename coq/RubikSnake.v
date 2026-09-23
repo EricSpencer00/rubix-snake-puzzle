@@ -1,5 +1,5 @@
 (* RubikSnake.v — Formal definition of the Rubik's Snake state space *)
-(* First formal verification of this puzzle in any proof assistant. *)
+(* Experimental integer-grid model; this file does not prove the full enumeration. *)
 
 Require Import List ZArith Lia.
 Import ListNotations.

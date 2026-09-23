@@ -1,0 +1,11 @@
+{
+  "name": "rubix-snake-puzzle",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/snake-page.test.cjs",
+    "test:browser": "node tests/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-validation test vectors for the Rubik's Snake enumerator."""
+"""Regression counts for the Python repeated-cell enumerator."""
 
 from enumerate import enumerate_snakes
 
@@ -28,6 +28,6 @@ def test_small_instances():
         print(f"  n={n:2d}: {result['valid']:>10,} / {result['unconstrained']:>10,} valid ({pct:5.2f}% invalid)")
 
 if __name__ == '__main__':
-    print("Running cross-validation tests...")
+    print("Running Python search regression tests...")
     test_small_instances()
-    print("All tests passed.")
+    print("All Python search regression tests passed.")
