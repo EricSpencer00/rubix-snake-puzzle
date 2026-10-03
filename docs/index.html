@@ -1094,6 +1094,23 @@ function detectCollisions(pieceCount, config) {
   return collisions;
 }
 
+// Closure is contact between the exposed leg faces, with opposing normals.
+// It does not put the last prism at the first prism's center or origin.
+function isClosedSnake(config) {
+  if (config.length === 0 || detectCollisions(config.length + 1, config).size) return false;
+  const pieces = calculateLatticePieces(config.length + 1, config);
+  const first = pieces[0], last = pieces[pieces.length - 1];
+  const face = (piece, span) => [piece.origin, addInt(piece.origin, span),
+    addInt(piece.origin, piece.basis[2]), addInt(addInt(piece.origin, span), piece.basis[2])]
+    .map(point => point.join(',')).sort().join(';');
+  const even = config.length % 2 === 0;
+  const lastSpan = last.basis[even ? 0 : 1];
+  const firstNormal = scaleInt(first.basis[0], -1);
+  const lastNormal = scaleInt(last.basis[even ? 1 : 0], -1);
+  return face(first, first.basis[1]) === face(last, lastSpan)
+    && dotInt(firstNormal, lastNormal) === -1;
+}
+
 function snakePositions(config) {
   const pieces = calculateLatticePieces(config.length + 1, config);
   return {

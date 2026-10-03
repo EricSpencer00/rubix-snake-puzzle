@@ -47,6 +47,8 @@ const {chromium} = require('playwright');
     const collisions = () => page.evaluate(() => detectCollisions(24, builderConfig).size);
     await ballButton.click();
     assert.equal(await collisions(), 0);
+    assert.equal(await page.evaluate(() => isClosedSnake(builderConfig)), true);
+    assert.equal(await page.evaluate(() => isClosedSnake(Array(23).fill(0))), false);
     await canvas.screenshot({path: path.join(artifacts, 'desktop-ball.png')});
     const ballConfig = await page.evaluate(() => builderConfig.slice());
     await page.getByRole('button', {name: 'Joint 1: 0 degrees', exact: true}).click();
