@@ -50,6 +50,14 @@ class GeometryTests(unittest.TestCase):
                 centroids6 = [tuple(sum(v[i] for v in p.vertices2()) for i in range(3)) for p in placed]
                 self.assertEqual(len(set(centroids6)), len(placed))
 
+    def test_end_contact_is_insufficient_when_interiors_overlap(self):
+        placed = pieces([2] * 7)
+        self.assertTrue(endpoints_match(placed[0], placed[-1], 7))
+        self.assertTrue(has_collision(placed))
+        self.assertFalse(is_closed([2] * 7))
+        for i in range(4):
+            self.assertEqual(placed[i], placed[i + 4])
+
     def test_small_root_counts_and_two_joint_shards(self):
         for wedges, valid, closed in ((1, 1, 0), (2, 4, 0), (3, 16, 0),
                                        (4, 64, 1), (5, 241, 0), (6, 920, 8)):

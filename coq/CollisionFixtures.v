@@ -38,3 +38,8 @@ Example broken_ball_positions : config_positions [R270; R270; R90; R270; R90; R9
 Proof. reflexivity. Qed.
 Example broken_ball_valid : is_valid [R270; R270; R90; R270; R90; R90; R270; R90; R270; R270; R90; R270; R90; R90; R270; R90; R270; R270; R90; R270; R0; R90; R270] = true.
 Proof. reflexivity. Qed.
+
+Example end_contact_with_interior_overlap_positions : config_positions [R180; R180; R180; R180; R180; R180; R180] = [mkPoint (0) (0) (0); mkPoint (1) (0) (0); mkPoint (1) (1) (0); mkPoint (1) (2) (0); mkPoint (0) (2) (0); mkPoint (-1) (2) (0); mkPoint (-1) (1) (0); mkPoint (-1) (0) (0)].
+Proof. reflexivity. Qed.
+Example end_contact_with_interior_overlap_valid : is_valid [R180; R180; R180; R180; R180; R180; R180] = true.
+Proof. reflexivity. Qed.

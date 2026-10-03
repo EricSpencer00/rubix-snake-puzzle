@@ -58,7 +58,7 @@ npm test
 
 The default Python count regression runs 2–10 wedges; historical 11–14 values remain recorded without running their larger searches. Half-cube root and two-joint shard tests run 1–6 wedges, including one closed four-piece sequence `[2,2,2]` and eight closed six-piece sequences. These are rooted, oriented turn-sequence counts without mirror or reversal reduction.
 
-Shared fixtures in `tests/fixtures/collision-models.json` cover straight, overlapping, open, and closed examples. Browser and Python half-cube tests compare exact occupancies and closure against them. `[0,2,2,1]` passes the lattice check but overlaps in the physical model; eight zero turns fail the lattice check but form a clear physical bar. Generated Coq examples check the lattice positions and validity from these same fixtures. Agreement on fixtures is regression evidence, not general equivalence or a completed physical proof.
+Shared fixtures in `tests/fixtures/collision-models.json` cover straight, overlapping, open, and closed examples. Browser and Python half-cube tests compare exact occupancies and closure against them. `[0,2,2,1]` passes the lattice check but overlaps in the physical model; eight zero turns fail the lattice check but form a clear physical bar. Seven `2` turns match the end faces but duplicate four prisms internally, so they are not a valid closed loop. Generated Coq examples check the lattice positions and validity from these same fixtures. Agreement on fixtures is regression evidence, not general equivalence or a completed physical proof.
 
 ## Coq and TLA+
 

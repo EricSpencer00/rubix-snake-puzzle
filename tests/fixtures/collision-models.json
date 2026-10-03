@@ -61,5 +61,14 @@
     "half_cube_valid": true,
     "physical_closed": false,
     "half_cube_occupancy": [{"cell2": [0, -2, 0], "kind": 9}, {"cell2": [0, 0, 0], "kind": 3}, {"cell2": [0, 0, -2], "kind": 4}, {"cell2": [2, 0, -2], "kind": 11}, {"cell2": [2, -2, -2], "kind": 0}, {"cell2": [2, -2, 0], "kind": 7}, {"cell2": [0, -2, 0], "kind": 10}, {"cell2": [0, -4, 0], "kind": 2}, {"cell2": [0, -4, -2], "kind": 4}, {"cell2": [2, -4, -2], "kind": 9}, {"cell2": [2, -2, -2], "kind": 3}, {"cell2": [2, -2, -4], "kind": 5}, {"cell2": [0, -2, -4], "kind": 10}, {"cell2": [0, -4, -4], "kind": 0}, {"cell2": [0, -4, -2], "kind": 7}, {"cell2": [-2, -4, -2], "kind": 8}, {"cell2": [-2, -2, -2], "kind": 3}, {"cell2": [-2, -2, -4], "kind": 4}, {"cell2": [0, -2, -4], "kind": 9}, {"cell2": [0, 0, -4], "kind": 1}, {"cell2": [0, 0, -2], "kind": 7}, {"cell2": [-2, 0, -2], "kind": 4}, {"cell2": [-2, 0, 0], "kind": 2}, {"cell2": [-2, 2, 0], "kind": 10}]
+  },
+  {
+    "id": "end-contact-with-interior-overlap",
+    "turns": [2, 2, 2, 2, 2, 2, 2],
+    "lattice_positions": [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 2, 0], [0, 2, 0], [-1, 2, 0], [-1, 1, 0], [-1, 0, 0]],
+    "lattice_valid": true,
+    "half_cube_valid": false,
+    "physical_closed": false,
+    "half_cube_occupancy": [{"cell2": [0, -2, 0], "kind": 9}, {"cell2": [0, 0, 0], "kind": 11}, {"cell2": [-2, 0, 0], "kind": 10}, {"cell2": [-2, -2, 0], "kind": 8}, {"cell2": [0, -2, 0], "kind": 9}, {"cell2": [0, 0, 0], "kind": 11}, {"cell2": [-2, 0, 0], "kind": 10}, {"cell2": [-2, -2, 0], "kind": 8}]
   }
 ]
