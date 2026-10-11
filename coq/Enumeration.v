@@ -22,16 +22,11 @@ Proof. reflexivity. Qed.
 (* These tiny examples are checked in Coq. They do not establish the
    larger Python counts or the published 24-piece result. *)
 
-(* === Key structural lemma === *)
-
-(* The straight configuration is always valid for any length *)
-Lemma straight_always_valid : forall n,
-  is_valid (repeat R0 n) = true.
-Proof.
-  induction n; simpl; auto.
-  (* The straight line never revisits a grid cell. *)
-  (* Full proof requires showing repeat-R0 produces strictly increasing coords. *)
-Admitted.
+(* The physical all-zero bar is clear in the browser. This lattice abstraction
+   instead returns to the origin after eight zero turns, so the previously
+   admitted straight_always_valid statement was false in this model. *)
+Lemma all_zero_lattice_counterexample : is_valid (repeat R0 8) = false.
+Proof. reflexivity. Qed.
 
 (* Mirror preserves validity *)
 Lemma mirror_preserves_validity : forall cfg,

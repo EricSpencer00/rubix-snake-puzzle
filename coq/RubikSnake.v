@@ -100,7 +100,7 @@ Definition apply_rotation (o : Orientation) (r : Rotation) : Orientation :=
    (because the hypotenuse face connects at 45°, redirecting travel).
    The alternating wedge geometry means even-indexed wedges go "forward"
    and odd-indexed wedges deflect into the "up" direction.
-   In the standard half-cube model:
+   In this repeated-cell abstraction (not the browser's half-cube geometry):
    - Even wedge (index 0,2,4,...): occupies cell at position, next position += forward
    - Odd wedge (index 1,3,5,...): occupies cell at position, next position += up
    After each wedge, forward and up swap (with appropriate sign). *)
@@ -191,26 +191,29 @@ Theorem total_configs_value :
   total_configs = 70368744177664.
 Proof. reflexivity. Qed.
 
-(* A straight snake (all R0) is always valid — no collisions. *)
+(* Nominal all-zero configuration. The lattice abstraction can revisit cells;
+   this is not a proof that the physical straight bar collides. *)
 Definition straight_config : Config :=
   repeat R0 23.
 
 Lemma straight_config_length : valid_length straight_config.
 Proof. unfold valid_length, straight_config. rewrite repeat_length. reflexivity. Qed.
 
-(* === Closed Loop Detection === *)
+(* === Lattice Revisit Diagnostic === *)
 
-Definition is_closed_loop (cfg : Config) : bool :=
-  let pts := config_positions cfg in
-  match pts with
+(* This abstraction has positions but no physical exposed end faces. The
+   former is_closed_loop compared the last occupied position with the first:
+   impossible for a valid multi-piece configuration, and true for one piece.
+   It is not a physical closure predicate. Physical closure is implemented in
+   the browser and Python half-cube model, not proved by this Coq model. *)
+Definition revisits_first_cell (cfg : Config) : bool :=
+  match cfg with
   | [] => false
-  | first :: _ =>
-    match last_error pts with
-    | None => false
-    | Some lst =>
-      (* Check if the last wedge's next position equals the first *)
-      Z.eqb (px first) (px lst) && Z.eqb (py first) (py lst) && Z.eqb (pz first) (pz lst)
-    end
+  | _ =>
+    let pts := config_positions cfg in
+    let first := pos initial_placement in
+    let lst := last pts first in
+    Z.eqb (px first) (px lst) && Z.eqb (py first) (py lst) && Z.eqb (pz first) (pz lst)
   end.
 
 (* === Symmetry: Mirror Configuration === *)

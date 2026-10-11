@@ -17,6 +17,7 @@ const straight = Array(23).fill(0);
 const shared = (a, b) => a.vertices.filter(p => b.vertices.some(q => p.every((v, i) => v === q[i])));
 const vector = p => new THREE.Vector3(...p);
 const configurations = [straight, ball];
+const collisionFixtures = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/collision-models.json'), 'utf8'));
 for (let joint = 0; joint < 23; joint++) {
   for (let turn = 0; turn < 4; turn++) {
     const config = [...ball];
@@ -123,11 +124,25 @@ test('ball is closed, compact, and collision-free (catches the J21 typo)', () =>
   const bounds = new THREE.Box3().setFromPoints(pieces.flatMap(p => p.vertices.map(vector)));
   assert.deepEqual(bounds.getSize(new THREE.Vector3()).toArray(), [3, 3, 3]);
   assert.equal(detectCollisions(24, ball).size, 0);
+  assert.equal(context.isClosedSnake(ball), true);
   const broken = [...ball];
   broken[20] = 0;
+  assert.equal(context.isClosedSnake(broken), false);
   const brokenPieces = calculateLatticePieces(24, broken);
   assert.notEqual(shared(brokenPieces[0], brokenPieces[23]).length, 4);
   assert.ok(detectCollisions(24, Array(23).fill(2)).size > 0);
+});
+
+test('shared physical and lattice fixtures expose model differences', () => {
+  for (const fixture of collisionFixtures) {
+    const pieces = calculateLatticePieces(fixture.turns.length + 1, fixture.turns);
+    assert.equal(detectCollisions(pieces.length, fixture.turns).size === 0, fixture.half_cube_valid, fixture.id);
+    assert.equal(context.isClosedSnake(fixture.turns), fixture.physical_closed, fixture.id);
+    const occupancy = Array.from(pieces, piece => ({cell2: Array.from(piece.cell, v => v * 2), kind: piece.type}));
+    assert.deepEqual(occupancy, fixture.half_cube_occupancy, fixture.id);
+  }
+  assert.ok(collisionFixtures.some(f => f.lattice_valid && !f.half_cube_valid));
+  assert.ok(collisionFixtures.some(f => !f.lattice_valid && f.half_cube_valid));
 });
 
 test('rendered plastic is closed, outward-facing, and inside each physical prism', () => {
